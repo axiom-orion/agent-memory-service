@@ -1,0 +1,13 @@
+__pycache__/
+*.py[cod]
+.cache/
+.pytest_cache/
+.ruff_cache/
+*.egg-info/
+build/
+dist/
+.venv/
+.DS_Store
+
+# LoCoMo dataset (download via `make locomo-data`; not redistributed here)
+data/locomo/

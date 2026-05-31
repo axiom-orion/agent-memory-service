@@ -1,0 +1,6 @@
+# runtime
+sentence-transformers>=2.7,<4
+faiss-cpu>=1.8
+numpy>=1.26
+# optional production paths:
+#   anthropic>=0.39   # LLM-backed fact extraction (extractor.LLMExtractor)

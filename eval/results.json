@@ -1,0 +1,90 @@
+{
+  "flat-vector": {
+    "overall": {
+      "acc@1": 0.417,
+      "found@5": 0.833,
+      "stale@5": 0.583,
+      "ctx_tokens": 32.5
+    },
+    "by_category": {
+      "changing": {
+        "acc@1": 0.0,
+        "found@5": 0.714,
+        "stale@5": 1.0,
+        "ctx_tokens": 36.857
+      },
+      "stable": {
+        "acc@1": 1.0,
+        "found@5": 1.0,
+        "stale@5": 0.0,
+        "ctx_tokens": 26.4
+      }
+    }
+  },
+  "+recency": {
+    "overall": {
+      "acc@1": 0.667,
+      "found@5": 0.917,
+      "stale@5": 0.583,
+      "ctx_tokens": 35.0
+    },
+    "by_category": {
+      "changing": {
+        "acc@1": 0.429,
+        "found@5": 0.857,
+        "stale@5": 1.0,
+        "ctx_tokens": 38.0
+      },
+      "stable": {
+        "acc@1": 1.0,
+        "found@5": 1.0,
+        "stale@5": 0.0,
+        "ctx_tokens": 30.8
+      }
+    }
+  },
+  "+consolidation": {
+    "overall": {
+      "acc@1": 0.833,
+      "found@5": 1.0,
+      "stale@5": 0.583,
+      "ctx_tokens": 21.583
+    },
+    "by_category": {
+      "changing": {
+        "acc@1": 0.714,
+        "found@5": 1.0,
+        "stale@5": 1.0,
+        "ctx_tokens": 22.429
+      },
+      "stable": {
+        "acc@1": 1.0,
+        "found@5": 1.0,
+        "stale@5": 0.0,
+        "ctx_tokens": 20.4
+      }
+    }
+  },
+  "+supersession (full)": {
+    "overall": {
+      "acc@1": 1.0,
+      "found@5": 1.0,
+      "stale@5": 0.0,
+      "ctx_tokens": 21.167
+    },
+    "by_category": {
+      "changing": {
+        "acc@1": 1.0,
+        "found@5": 1.0,
+        "stale@5": 0.0,
+        "ctx_tokens": 21.571
+      },
+      "stable": {
+        "acc@1": 1.0,
+        "found@5": 1.0,
+        "stale@5": 0.0,
+        "ctx_tokens": 20.6
+      }
+    }
+  }
+}

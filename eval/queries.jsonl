@@ -1,0 +1,12 @@
+{"id": "Q001", "query": "Who is my current manager?", "subject": "user", "attribute": "current_manager", "gold_value": "Bob Tran", "prior_values": ["Alice Reyes"], "category": "changing"}
+{"id": "Q002", "query": "What project am I currently on?", "subject": "user", "attribute": "current_project", "gold_value": "Project Cygnus", "prior_values": ["Project Atlas", "Project Borealis"], "category": "changing"}
+{"id": "Q003", "query": "What is my current job title?", "subject": "user", "attribute": "job_title", "gold_value": "Staff Analyst", "prior_values": ["Senior Analyst"], "category": "changing"}
+{"id": "Q004", "query": "Where is my office?", "subject": "user", "attribute": "office_location", "gold_value": "fully remote", "prior_values": ["Floor 3, Building A"], "category": "changing"}
+{"id": "Q005", "query": "What is the primary metric I report on?", "subject": "user", "attribute": "primary_metric", "gold_value": "net revenue retention", "prior_values": ["weekly active users"], "category": "changing"}
+{"id": "Q006", "query": "What is my preferred IDE?", "subject": "user", "attribute": "preferred_ide", "gold_value": "PyCharm", "prior_values": ["VS Code"], "category": "changing"}
+{"id": "Q007", "query": "What is my current sprint goal?", "subject": "user", "attribute": "sprint_goal", "gold_value": "harden the eval harness", "prior_values": ["ship the ingestion API", "cut p99 latency below 200ms", "instrument retention dashboards"], "category": "changing"}
+{"id": "Q008", "query": "What is my name?", "subject": "user", "attribute": "name", "gold_value": "Jordan Ellison", "prior_values": [], "category": "stable"}
+{"id": "Q009", "query": "What is my employee ID?", "subject": "user", "attribute": "employee_id", "gold_value": "E-44817", "prior_values": [], "category": "stable"}
+{"id": "Q010", "query": "What city do I live in?", "subject": "user", "attribute": "home_city", "gold_value": "Denver", "prior_values": [], "category": "stable"}
+{"id": "Q011", "query": "When was I hired?", "subject": "user", "attribute": "hire_date", "gold_value": "2019-06-03", "prior_values": [], "category": "stable"}
+{"id": "Q012", "query": "What time zone am I in?", "subject": "user", "attribute": "timezone", "gold_value": "Mountain Time", "prior_values": [], "category": "stable"}

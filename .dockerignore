@@ -1,0 +1,16 @@
+.git
+.github
+data
+eval
+bench
+tests
+scripts
+**/__pycache__
+**/*.pyc
+.pytest_cache
+.ruff_cache
+.cache
+*.tar.gz
+*.egg-info
+.venv
+DEPLOY.md

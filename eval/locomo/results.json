@@ -1,0 +1,45 @@
+{
+  "mode": "retrieval",
+  "n_scored": 1536,
+  "overall": {
+    "recall@1": 0.162,
+    "recall@5": 0.366,
+    "recall@10": 0.454,
+    "recall@20": 0.545,
+    "mrr": 0.286
+  },
+  "by_category": {
+    "multi-hop": {
+      "recall@1": 0.052,
+      "recall@5": 0.188,
+      "recall@10": 0.269,
+      "recall@20": 0.357,
+      "mrr": 0.237,
+      "n": 282
+    },
+    "temporal": {
+      "recall@1": 0.229,
+      "recall@5": 0.415,
+      "recall@10": 0.492,
+      "recall@20": 0.581,
+      "mrr": 0.329,
+      "n": 321
+    },
+    "open-domain": {
+      "recall@1": 0.049,
+      "recall@5": 0.186,
+      "recall@10": 0.254,
+      "recall@20": 0.338,
+      "mrr": 0.163,
+      "n": 92
+    },
+    "single-hop": {
+      "recall@1": 0.185,
+      "recall@5": 0.427,
+      "recall@10": 0.523,
+      "recall@20": 0.617,
+      "mrr": 0.3,
+      "n": 841
+    }
+  }
+}
