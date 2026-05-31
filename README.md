@@ -1,5 +1,7 @@
 # agent-memory-service
 
+[![ci](https://github.com/axiom-orion/agent-memory-service/actions/workflows/ci.yml/badge.svg)](https://github.com/axiom-orion/agent-memory-service/actions/workflows/ci.yml)
+
 A typed, provenance-tracked **memory layer for LLM agents** — the substrate an agent platform needs to carry knowledge across sessions. It implements the four stores of the standard cognitive-memory taxonomy (working / episodic / semantic / procedural), distils episodic events into semantic facts via **consolidation**, retrieves with recency-aware scoring, **forgets** via TTL and supersession, and writes every operation to an **append-only audit log** for explainability.
 
 It is built to make one failure mode measurable: **naive "append everything to a vector store" agent memory returns stale facts when facts change over time.** On a synthetic interaction history where some facts are updated across sessions, a flat vector store answers current-fact queries correctly at rank 1 **0%** of the time and surfaces a stale value in the top-5 **100%** of the time; the full memory service reaches **100%** current-fact accuracy with **0%** staleness — while cutting the tokens needed to ground an answer by ~35%.
