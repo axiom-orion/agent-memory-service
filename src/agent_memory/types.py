@@ -34,6 +34,10 @@ class MemoryItem:
     # lineage
     provenance: list[str] = field(default_factory=list)
     embedding: np.ndarray | None = field(default=None, repr=False)
+    # stable int64 id for the FAISS index (the index keys on ints; the store keys
+    # on string ids). Assigned once, on first registration with the index, and kept
+    # stable across rebuilds so a memory's vector id never changes underneath it.
+    vec_id: int | None = None
 
     @property
     def is_fact(self) -> bool:

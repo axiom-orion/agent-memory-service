@@ -1,0 +1,18 @@
+# Direct runtime dependencies for the Cloud Run serving image (serve/app.py with the
+# default `local` embeddings backend). This is the human-edited source; the fully-pinned
+# (exact ==) lockfile the image installs is `requirements.txt`, generated with:
+#
+#   make lock        # pip-compile in a python:3.12-slim container
+#
+# To add wheel hashes (--require-hashes), run `make lock` with --generate-hashes in a
+# network that allows the PyTorch CDN wheel download, then re-enable it in the Dockerfile.
+# CPU-only torch is pulled from the PyTorch CPU index so the image carries no CUDA.
+--extra-index-url https://download.pytorch.org/whl/cpu
+
+torch==2.5.1+cpu
+sentence-transformers==3.3.1
+faiss-cpu==1.9.0
+numpy==1.26.4
+fastapi==0.115.6
+uvicorn[standard]==0.32.1
+pydantic==2.10.3

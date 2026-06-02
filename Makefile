@@ -1,4 +1,4 @@
-.PHONY: setup gen-data eval demo test lint clean
+.PHONY: setup gen-data eval demo test lint serve lock clean
 PY ?= python3
 
 setup:        ## install runtime + dev deps and the package (editable)
@@ -17,7 +17,14 @@ test:         ## run the test suite
 	$(PY) -m pytest -q
 
 lint:         ## static checks
-	$(PY) -m ruff check src eval data tests scripts
+	$(PY) -m ruff check src eval serve bench data tests scripts
+
+serve:        ## run the HTTP service locally on :8080 (Ctrl-C to stop)
+	$(PY) -m uvicorn serve.app:app --host 0.0.0.0 --port 8080
+
+lock:         ## regenerate the pinned, hash-locked requirements.txt (linux/py3.12 via docker)
+	docker run --rm -v "$(CURDIR):/w" -w /w python:3.12-slim sh -c \
+		"pip install -q pip-tools && pip-compile -q --generate-hashes --output-file requirements.txt requirements.in"
 
 clean:
 	rm -rf .cache .pytest_cache .ruff_cache **/__pycache__

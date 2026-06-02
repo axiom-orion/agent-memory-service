@@ -1,23 +1,83 @@
-"""Smoke test for the HTTP serving layer (local embeddings backend)."""
+"""HTTP serving tests against the C3 contract.
+
+Uses the deterministic `hash` embedding backend so no transformer is downloaded; the
+lifespan loads the bundled synthetic corpus and builds the FAISS index. Env is set
+before importing the app because the rate-limit / auth knobs are read at import time.
+"""
 from __future__ import annotations
 
-from fastapi.testclient import TestClient
+import os
 
-from serve.app import app
+os.environ.setdefault("EMBEDDINGS_BACKEND", "hash")
+os.environ.setdefault("ADMIN_TOKEN", "test-token")
+os.environ.setdefault("RATE_LIMIT_PER_MINUTE", "100000")
+
+from fastapi.testclient import TestClient  # noqa: E402
+
+from serve.app import app  # noqa: E402
+
+AUTH = {"Authorization": "Bearer test-token"}
 
 
-def test_health_remember_recall_roundtrip():
+def test_health():
     with TestClient(app) as client:
-        assert client.get("/healthz").json()["status"] == "ok"
+        body = client.get("/health").json()
+        assert body["status"] == "ok"
+        assert body["corpus_size"] > 0
 
-        client.post("/ingest", json={"records": [
-            {"id": "A1", "text": "Mel moved to Lisbon for a new job", "ts_day": 1},
-            {"id": "A2", "text": "Caroline adopted a dog named Pixel", "ts_day": 2},
-            {"id": "A3", "text": "they discussed hiking the Azores in summer", "ts_day": 3},
-        ]})
 
-        hits = client.post("/recall", json={"query": "where did Mel move", "k": 3}).json()
-        assert hits, "recall returned no hits"
-        assert hits[0]["id"] == "A1"  # the relevant memory ranks first
-        assert "X-Process-Time-Ms" in client.post(
-            "/recall", json={"query": "dog", "k": 1}).headers
+def test_recall_c3_contract():
+    with TestClient(app) as client:
+        r = client.post("/recall", json={"query": "Who is my current manager?", "k": 5})
+        assert r.status_code == 200
+        records = r.json()["records"]
+        assert records, "recall returned no records"
+        rec = records[0]
+        assert set(rec) == {"id", "content", "type", "importance", "superseded"}
+        assert isinstance(rec["id"], int)
+        assert rec["type"] in {"working", "episodic", "semantic", "procedural"}
+        # the current value surfaces; the superseded value never does
+        contents = " ".join(x["content"] for x in records)
+        assert "Bob Tran" in contents
+        assert "Alice Reyes" not in contents
+        assert "X-Process-Time-Ms" in client.post("/recall", json={"query": "x"}).headers
+
+
+def test_stats_c3_contract():
+    with TestClient(app) as client:
+        stats = client.get("/stats").json()
+        assert set(stats) == {"active", "superseded"}
+        assert stats["active"] > 0
+        assert stats["superseded"] >= 1
+
+
+def test_admin_rebuild_requires_bearer():
+    with TestClient(app) as client:
+        assert client.post("/admin/rebuild").status_code == 401
+        assert client.post(
+            "/admin/rebuild", headers={"Authorization": "Bearer wrong"}).status_code == 401
+        ok = client.post("/admin/rebuild", headers=AUTH)
+        assert ok.status_code == 200
+        assert ok.json()["rebuilt"] > 0
+
+
+def test_mutations_are_guarded_and_work_with_auth():
+    with TestClient(app) as client:
+        assert client.post("/ingest", json={"records": []}).status_code == 401
+        assert client.post("/remember", json={"text": "x"}).status_code == 401
+        n = client.post("/ingest", headers=AUTH, json={"records": [
+            {"id": "Z1", "text": "Zelda the cat likes tuna", "ts_day": 1}]})
+        assert n.json()["ingested"] == 1
+        client.post("/admin/rebuild", headers=AUTH)
+        hits = client.post("/recall", json={"query": "Zelda the cat", "k": 5}).json()["records"]
+        assert any("Zelda" in h["content"] for h in hits)
+
+
+def test_rate_limit_returns_429(monkeypatch):
+    import serve.app as appmod
+    monkeypatch.setattr(appmod, "_RL_PER_MIN", 3)
+    appmod._rl_hits.clear()
+    with TestClient(app) as client:
+        codes = [client.post("/recall", json={"query": "x"}).status_code for _ in range(8)]
+    assert 429 in codes
+    assert codes.count(200) <= 3

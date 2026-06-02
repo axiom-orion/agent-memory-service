@@ -64,7 +64,30 @@ Beyond the synthetic ablation, the retriever is evaluated on **LoCoMo** (Maharan
 
 ## Serving & deployment (Cloud Run)
 
-`serve/app.py` exposes the memory service over HTTP (`/remember`, `/ingest`, `/recall`, `/consolidate`, `/forget`, `/healthz`) with two embedding backends — `local` (`all-MiniLM-L6-v2`, baked into the image) and `vertex` (Vertex AI text-embeddings, selected with `EMBEDDINGS_BACKEND=vertex`). A `Dockerfile` builds a Cloud Run-ready image; **[DEPLOY.md](DEPLOY.md)** is the step-by-step. `bench/loadtest.py` measures `/recall` latency and throughput against any URL; `bench/costmodel.py` converts a measured latency into $/1k requests.
+<!-- LIVE_URL_START -->
+**Live demo:** [`https://agent-memory-service-voiwkzrlma-uc.a.run.app`](https://agent-memory-service-voiwkzrlma-uc.a.run.app) — a rate-limited, read-only API over a bundled synthetic corpus, on Cloud Run (`us-central1`, scale-to-zero).
+
+```bash
+curl -s -X POST https://agent-memory-service-voiwkzrlma-uc.a.run.app/recall \
+  -H 'content-type: application/json' -d '{"query":"Who is my current manager?","k":3}'
+# -> {"records":[{"id":5,"content":"current manager: Bob Tran","type":"semantic",...}]}
+curl -s https://agent-memory-service-voiwkzrlma-uc.a.run.app/stats   # -> {"active":22,"superseded":10}
+```
+
+(First request after idle cold-starts the container — it loads MiniLM, so allow a few seconds.)
+<!-- LIVE_URL_END -->
+
+`serve/app.py` exposes the memory service over HTTP. The public, **rate-limited, read-only** surface serves a **bundled synthetic corpus** (never user data):
+
+```
+POST /recall   { query, k? }  -> { records: [{ id, content, type, importance, superseded }] }
+GET  /stats                    -> { active, superseded }
+GET  /health                   -> liveness + active embeddings backend
+```
+
+Mutating and admin routes (`/admin/rebuild`, `/remember`, `/ingest`, `/consolidate`, `/forget`) are **Bearer-guarded** via `ADMIN_TOKEN` (injected from Secret Manager, never baked into the image; routes return `503` when it is unset). There is **no background maintenance thread** — Cloud Run freezes idle CPU — so the index is rebuilt on write and by `POST /admin/rebuild`, which a **Cloud Scheduler** job calls on a cadence (`VectorIndex.rebuild(*store.get_active_vectors())`).
+
+Two embedding backends: `local` (`all-MiniLM-L6-v2`, baked into the image) and `vertex` (Vertex AI text-embeddings, `EMBEDDINGS_BACKEND=vertex`). The `Dockerfile` builds a non-root, `$PORT`-binding, hash-pinned image; **[DEPLOY.md](DEPLOY.md)** is the step-by-step. `bench/loadtest.py` measures `/recall` latency and throughput against any URL; `bench/costmodel.py` converts a measured latency into $/1k requests.
 
 Local baseline — this container (one shared CPU, MiniLM, in-memory, 500 memories, 32-way concurrency), as a sanity anchor, **not** a Cloud Run figure:
 
@@ -101,8 +124,8 @@ flowchart LR
 | retention | `retention.py` | TTL expiry, pruning of superseded facts past a grace window |
 | audit | `audit.py` | append-only operation log (the explainability substrate) |
 | extractor | `extractor.py` | structured passthrough; optional Anthropic LLM extraction (production) |
-| index | `vector_index.py` | FAISS inner-product over item embeddings; numpy fallback |
-| service | `service.py` | `remember` / `consolidate` / `recall` / `forget` facade |
+| index | `vector_index.py` | FAISS `IndexIDMap2` over int64 ids; exact `IndexFlatIP` by default (HNSW opt-in); `rebuild()` from the active set, `remove()` on flat |
+| service | `service.py` | `remember` / `consolidate` / `recall` / `forget` facade; owns the str↔int id map, `get_active_vectors()`, and `rebuild_index()` |
 
 ---
 
