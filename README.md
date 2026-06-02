@@ -203,3 +203,9 @@ agent-memory-service/
 ```
 
 MIT-licensed. CI runs lint, tests, and the full ablation on every push.
+
+---
+
+## Context
+
+Part of [**axiom-orion**](https://github.com/axiom-orion) — small, eval-driven engineering pieces that each turn one hand-waved claim into a reproducible number. The provenance-tracking, supersession, and audit discipline shown here is the same principle the [**Vorion**](https://github.com/vorionsys) governed-AI platform (`@vorionsys/*`) applies to autonomous agents: keep what's true now, retain what changed, and prove the lineage. Built by [Ryan Cason](https://github.com/vorionsys).
