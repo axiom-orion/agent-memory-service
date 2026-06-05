@@ -54,7 +54,7 @@ def _pct(values: list[float], p: float) -> float:
 
 async def main_async(args) -> None:
     async with httpx.AsyncClient(base_url=args.url) as client:
-        h = await client.get("/healthz", timeout=120)
+        h = await client.get("/health", timeout=120)
         h.raise_for_status()
         backend = h.json().get("embeddings_backend", "?")
         print(f"target {args.url} | embeddings_backend={backend} | seeding {args.seed} memories...")

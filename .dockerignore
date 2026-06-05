@@ -1,16 +1,23 @@
+# Keep the image small and free of anything that isn't the service + its bundled
+# synthetic corpus. The corpus (data/sessions/) IS copied in — only the heavy,
+# not-redistributed LoCoMo data and dev artifacts are excluded.
 .git
 .github
-data
 eval
 bench
 tests
 scripts
+data/locomo
 **/__pycache__
 **/*.pyc
 .pytest_cache
 .ruff_cache
 .cache
+.venv
 *.tar.gz
 *.egg-info
-.venv
-DEPLOY.md
+*.md
+!README.md
+# never bake local env / secrets into the image
+.env
+*.env

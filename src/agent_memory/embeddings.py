@@ -1,7 +1,17 @@
-"""Dense embedding pipeline (MiniLM) with on-disk caching."""
+"""Dense embedding pipeline (MiniLM) with on-disk caching.
+
+Two embedders share one interface -- ``encode(texts, use_cache=True) -> float32[n, d]``
+returning L2-normalized rows (so inner product == cosine, which is what the FAISS
+index assumes):
+
+  * :class:`Embedder`        -- MiniLM (``all-MiniLM-L6-v2``), real semantic recall.
+  * :class:`HashingEmbedder` -- deterministic, dependency-free bag-of-words hashing
+                                for tests/dev. NOT production recall quality.
+"""
 from __future__ import annotations
 
 import hashlib
+import re
 from pathlib import Path
 
 import numpy as np
@@ -38,3 +48,29 @@ class Embedder:
         if use_cache:
             np.save(self._key(texts), vecs)
         return vecs
+
+
+class HashingEmbedder:
+    """Deterministic, dependency-free embeddings for tests/dev.
+
+    Hashes word tokens into a fixed-dimension bag-of-words vector, L2-normalized so
+    inner product equals cosine -- the same contract the FAISS index expects of
+    MiniLM. Identical text yields an identical vector (so self-retrieval is exact);
+    token overlap drives similarity. This is **not** a substitute for MiniLM's
+    semantic recall -- it exists so the index/serving paths can be exercised without
+    downloading torch + a transformer model.
+    """
+
+    def __init__(self, dim: int | None = None):
+        self.dim = dim or 384
+
+    def encode(self, texts: list[str], use_cache: bool = True) -> np.ndarray:
+        out = np.zeros((len(texts), self.dim), dtype=np.float32)
+        for row, text in enumerate(texts):
+            for tok in re.findall(r"[a-z0-9]+", text.lower()):
+                h = int(hashlib.blake2b(tok.encode(), digest_size=8).hexdigest(), 16)
+                out[row, h % self.dim] += 1.0
+            norm = float(np.linalg.norm(out[row]))
+            if norm > 0.0:
+                out[row] /= norm
+        return out
