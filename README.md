@@ -97,6 +97,21 @@ Local baseline — this container (one shared CPU, MiniLM, in-memory, 500 memori
 
 Latency here is dominated by CPU-bound embedding under concurrency on a single core; the `vertex` backend offloads embedding and Cloud Run provides dedicated CPU + autoscaling. Deploy and run `bench/loadtest.py` against the live URL for real deployed p50/p99. The in-memory store is single-instance by design — durable memory (pgvector/Supabase or Vertex Vector Search) is the documented production extension.
 
+### Consumed by flcason.com (the Keeper)
+
+The genealogy "Keeper" on [`flcason.com`](https://flcason.com) is a real consumer of this
+contract. Its weekly research pass is otherwise stateless; pointed at a deployment of this
+service it gains **durable memory of its own past runs** — at the start it `POST /recall`s
+what earlier runs found about each open line, and at the end it `POST /ingest`s the run's
+findings keyed on `(subject = personId, attribute = the open line)` and `POST /consolidate`s,
+so a later corroborated finding **supersedes** the stale one rather than both lingering. The
+client is a dependency-free `fetch` wrapper (`ui_kits/living-line/memory-client.js` in
+`cason-heritage`), env-gated (`KEEPER_MEMORY_URL` + `KEEPER_MEMORY_TOKEN`) and graceful: a
+memory outage degrades the Keeper to its stateless behaviour rather than failing the run.
+`recall` uses the public surface; `ingest`/`consolidate` use the Bearer admin routes. This is
+the agent-platform use the four-store taxonomy was built for — supersession is what keeps the
+Keeper from re-proposing a lead it already settled.
+
 ---
 
 ## Architecture
