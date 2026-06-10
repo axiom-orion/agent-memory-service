@@ -81,3 +81,40 @@ def test_rate_limit_returns_429(monkeypatch):
         codes = [client.post("/recall", json={"query": "x"}).status_code for _ in range(8)]
     assert 429 in codes
     assert codes.count(200) <= 3
+
+
+def test_federation_seam_contract():
+    """The exact endpoints + record shape cason's Keeper (memory-client.js) depends on:
+    POST /ingest (admin) -> POST /recall (public) -> GET /stats. Pinned here so the
+    cross-repo seam can't drift out from under the consumer."""
+    with TestClient(app) as client:
+        ing = client.post("/ingest", headers=AUTH, json={"records": [
+            {"id": "SEAM1", "text": "The Keeper confirmed the 1635 Harwood patent.",
+             "ts_day": 3, "subject": "thomas", "attribute": "patent", "value": "1635"}]})
+        assert ing.json()["ingested"] == 1
+        client.post("/admin/rebuild", headers=AUTH)
+        recs = client.post("/recall", json={"query": "Harwood patent", "k": 5}).json()["records"]
+        assert recs and set(recs[0]) == {"id", "content", "type", "importance", "superseded"}
+        stats = client.get("/stats").json()
+        assert set(stats) == {"active", "superseded"} and stats["active"] > 0
+
+
+def test_pag_verify_endpoint_reports_integrity_and_actor():
+    with TestClient(app) as client:
+        v0 = client.get("/pag/verify").json()
+        assert v0["ok"] is True and v0["length"] >= 1
+        assert v0["signed"] is False                     # unsigned by default, said plainly
+        assert v0["actor"]["attestation_level"] in {"config-hash", "declared"}
+        # a write extends the chain; integrity still holds
+        client.post("/remember", headers=AUTH, json={"text": "durable note", "day": 9})
+        v1 = client.get("/pag/verify").json()
+        assert v1["ok"] is True and v1["length"] > v0["length"]
+
+
+def test_pag_snapshot_is_admin_guarded_and_matches_the_chain():
+    with TestClient(app) as client:
+        assert client.get("/pag/snapshot").status_code == 401
+        snap = client.get("/pag/snapshot", headers=AUTH).json()
+        head = client.get("/pag/verify").json()["head"]
+        assert snap["head"] == head and len(snap["entries"]) >= 1
+        assert snap["entries"][0]["op"] == "model-attest"   # identity first

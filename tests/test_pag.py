@@ -171,3 +171,44 @@ def test_weight_fingerprint_value_addressed():
     sd2 = {k: v.copy() for k, v in sd.items()}
     sd2["layer.w"][0, 0] = 2.0
     assert weight_fingerprint(sd2) != fp
+
+
+# --- durability: the chain survives a restart ------------------------------- #
+
+def test_pag_durable_save_load_roundtrip(tmp_path):
+    log = ProvenanceLog(signing_key=KEY)
+    for i in range(3):
+        log.append(i, "write", f"M{i:04d}", "episodic")
+    p = tmp_path / "pag.json"
+    log.save(p)
+    restored = ProvenanceLog.load(p, signing_key=KEY)
+    assert restored.head() == log.head() and len(restored) == 3 and restored.verify().ok
+
+
+def test_pag_load_refuses_a_tampered_file(tmp_path):
+    log = ProvenanceLog()
+    for i in range(2):
+        log.append(i, "write", f"M{i:04d}")
+    p = tmp_path / "pag.json"
+    log.save(p)
+    import json
+    d = json.loads(p.read_text())
+    d["entries"][0]["detail"] = "history, rewritten on disk"
+    p.write_text(json.dumps(d))
+    with pytest.raises(ValueError):
+        ProvenanceLog.load(p)
+
+
+def test_service_pag_persists_and_restores_continuing_the_chain(tmp_path):
+    svc = MemoryService(policy=MemoryPolicy(), embedder=HashingEmbedder(dim=64))
+    svc.remember("Ada moved to Lisbon", day=1, subject="ada", attribute="loc", value="Lisbon")
+    p = tmp_path / "pag.json"
+    svc.save_pag(p)
+    head, length = svc.pag.head(), len(svc.pag)
+
+    # a fresh instance (a "restart") adopts the verified chain and continues it
+    svc2 = MemoryService(policy=MemoryPolicy(), embedder=HashingEmbedder(dim=64))
+    svc2.restore_pag(p)
+    assert svc2.pag.head() == head and len(svc2.pag) == length and svc2.pag.verify().ok
+    svc2.remember("Ada moved to Madrid", day=5, subject="ada", attribute="loc", value="Madrid")
+    assert len(svc2.pag) == length + 1 and svc2.pag.verify().ok  # appended, still intact
