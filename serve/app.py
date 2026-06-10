@@ -224,6 +224,24 @@ def stats():
     return StatsResp(**svc.counts(_state.get("now", 0)))
 
 
+@app.get("/pag/verify")
+def pag_verify():
+    """Integrity of the provenance chain: recomputes every hash (and signature when
+    PAG_SIGNING_KEY is set). `signed: false` means honestly unsigned, not broken."""
+    svc = _state["svc"]
+    r = svc.pag.verify()
+    return {"ok": r.ok, "length": r.length, "head": svc.pag.head(),
+            "broken_at": r.broken_at, "signed": r.signed, "sig_failures": r.sig_failures,
+            "actor": {"agent_id": svc.actor.agent_id, "model_id": svc.actor.model_id,
+                      "attestation_level": svc.actor.attestation_level}}
+
+
+@app.get("/pag/snapshot", dependencies=[Depends(require_admin)])
+def pag_snapshot():
+    """The replayable export of the whole chain (admin: it carries operation details)."""
+    return _state["svc"].pag.snapshot()
+
+
 # --------------------------------------------------------------------------- #
 # Admin / mutating (Bearer-guarded)
 # --------------------------------------------------------------------------- #

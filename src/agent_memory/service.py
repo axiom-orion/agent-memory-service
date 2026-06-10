@@ -16,14 +16,21 @@ background thread -- on Cloud Run the cadence comes from Cloud Scheduler.
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 
 import numpy as np
 
-from .audit import AuditLog
 from .config import MemoryPolicy, settings
 from .consolidation import consolidate
 from .embeddings import Embedder
+from .pag import (
+    ActorIdentity,
+    AttestedAuditLog,
+    ProvenanceLog,
+    attest_embedder,
+    weight_fingerprint,
+)
 from .retention import apply_retention
 from .scoring import score
 from .stores import EpisodicMemory, ProceduralMemory, SemanticMemory, WorkingMemory
@@ -34,14 +41,26 @@ from .vector_index import VectorIndex, VectorIndexConfig
 class MemoryService:
     def __init__(self, policy: MemoryPolicy | None = None,
                  embedder: Embedder | None = None,
-                 index_type: str = "flat"):
+                 index_type: str = "flat",
+                 actor: ActorIdentity | None = None):
         self.policy = policy or MemoryPolicy()
         self.embedder = embedder or Embedder()
         self.working = WorkingMemory(settings.working_capacity)
         self.episodic = EpisodicMemory()
         self.semantic = SemanticMemory()
         self.procedural = ProceduralMemory()
-        self.audit = AuditLog()
+        # PAG: the append-only, hash-chained, actor-attributed provenance slice. The
+        # plain audit surface is unchanged (AttestedAuditLog is a drop-in AuditLog);
+        # every record() now also lands in the chain with the writer's identity.
+        att = attest_embedder(self.embedder)
+        self.actor = actor or ActorIdentity(
+            agent_id=os.environ.get("PAG_AGENT_ID", "memory-service"),
+            model_id=att["model"], attestation_level=att["grade"])
+        self.pag = ProvenanceLog()
+        self.audit = AttestedAuditLog(self.pag, self.actor)
+        # the chain's first entry attests the model identity memories are embedded under
+        self.pag.append(0, "model-attest", "embedder",
+                        f"{att['model']} ({att['grade']})", actor=self.actor, payload=att)
         self._consolidated = False
         self._dim: int | None = None
         # --- vector index + str<->int id mapping ------------------------------ #
@@ -103,6 +122,26 @@ class MemoryService:
         pool = self.semantic.all() if self.policy.use_consolidation else self.episodic.items()
         apply_retention(pool, now_day, self.policy, self.audit)
         self._index_dirty = True
+
+    def attest_model(self, now_day: int = 0) -> dict:
+        """Upgrade the embedder's identity to weight-fingerprint grade (Paramesphere S0).
+
+        Deliberately NOT done at construction: it loads the model. Digests the loaded
+        state_dict (catches post-load tampering; survives benign re-serialization; not
+        quantization-robust) and appends the upgraded attestation to the PAG. For the
+        weightless HashingEmbedder this is a no-op re-statement of its config-hash.
+        """
+        att = attest_embedder(self.embedder)
+        if hasattr(self.embedder, "model_name") and hasattr(self.embedder, "_load"):
+            model = self.embedder._load()
+            att = {"model": self.embedder.model_name, "grade": "weight-fingerprint",
+                   "fingerprint": weight_fingerprint(model.state_dict())}
+        self.actor = ActorIdentity(agent_id=self.actor.agent_id,
+                                   model_id=att["model"], attestation_level=att["grade"])
+        self.audit.actor = self.actor
+        self.pag.append(now_day, "model-attest", "embedder",
+                        f"{att['model']} ({att['grade']})", actor=self.actor, payload=att)
+        return att
 
     # --- vector index ------------------------------------------------------- #
     def _register(self, item: MemoryItem) -> int:

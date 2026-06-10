@@ -179,6 +179,26 @@ The agent answers with the current value; the prior value is retained, attribute
 
 ---
 
+## PAG — the Provenance Attestation Graph (the append-only slice, fire-walled)
+
+This service deliberately *forgets* (TTL pruning, in-place supersession) — the opposite of a
+provenance ledger, which must never forget and must be tamper-evident. So PAG
+(`src/agent_memory/pag.py`) is **not** the whole memory layer: it is the **append-only slice
+only**. Every audit operation tees into a hash-chained, actor-attributed log (the existing
+`audit.record()` call sites are untouched — `AttestedAuditLog` is a drop-in):
+
+- **content addressing** — each entry's substance is identified by the SHA-256 of its canonical payload;
+- **a hash chain** — mutate or drop any entry and `verify()` localises the break to a sequence number;
+- **actor identity** — `agent_id` / `model_id` / `attestation_level` record *who* performed each operation, under which model identity, at which attestation grade (`none < declared < config-hash < behavioral < weight-fingerprint`);
+- **optional signing** — set `PAG_SIGNING_KEY` and every entry carries an HMAC; without it entries are honestly **unsigned** and `verify()` says so;
+- **replay snapshots** — `snapshot()` exports the chain; `restore()` refuses a tampered one;
+- **model attestation first** — the chain's first entry records the embedding model's identity (`MemoryService.attest_model()` upgrades it to weight-fingerprint grade by digesting the loaded weights — deliberately not done at construction, which must never download a model).
+
+Endpoints: `GET /pag/verify` (public — integrity status) and `GET /pag/snapshot` (admin).
+The claims are pinned as executable assertions in `tests/test_pag.py`.
+
+---
+
 ## Production backends
 
 The reference build is in-memory (FAISS + Python) so the eval is reproducible with zero setup. The interfaces map onto production stores without changing call sites: working memory → Redis with TTL; episodic/semantic vector stores → pgvector / Pinecone / Vertex AI Vector Search; the audit log → an append-only table or event stream. The `extractor.LLMExtractor` sketches the Anthropic-backed path that populates `(subject, attribute, value)` from free-text turns; the eval uses the structured passthrough so CI needs no key or network.
@@ -189,7 +209,7 @@ The reference build is in-memory (FAISS + Python) so the eval is reproducible wi
 
 - **Synthetic data, deterministic** (`SEED=23`): no real-person PII, and every gold answer is derivable from the generated timeline. The scenario is small (42 interactions, 12 queries) — enough to separate the policies cleanly and run fast/deterministically, not a claim about behaviour at production scale. The FAISS index and batched embedding cache are there so the same code scales.
 - **Fact extraction is upstream.** The eval assumes structured `(subject, attribute, value)` triples (as if emitted by an agent or the optional LLM extractor). Free-text fact extraction quality is its own problem and is out of scope for this measurement.
-- **"Provenance" means source attribution + an operation audit trail** — which statements back a fact and what happened to it — not a cryptographic proof-chain.
+- **Provenance comes in two grades here.** Item-level provenance (which statements back a fact) is source attribution, not proof. The **PAG** slice adds the cryptographic part — a hash chain with optional HMAC signing over the operation log — but only for the append-only slice; the consolidation/TTL layer that mutates and forgets is memory, not provenance-of-record. Signing requires a configured key; per-request agent identity on the HTTP surface is future work (today the writer identity is service-level).
 - **Consolidation here is rule-based** (group-by-key, latest-wins). Semantic summarisation/clustering of non-fact episodic memories and an LLM answer-synthesis layer over the recalled, cited context are the natural next extensions.
 
 ---
