@@ -34,6 +34,7 @@ import hmac as hmac_mod
 import json
 import os
 from dataclasses import asdict, dataclass, field
+from pathlib import Path
 
 from .audit import AuditLog
 
@@ -109,6 +110,11 @@ class ProvenanceLog:
         # an empty key means "unsigned", consistently — append and verify must agree
         self._key = (signing_key if signing_key is not None else _signing_key()) or None
 
+    @property
+    def signing_key(self) -> bytes | None:
+        """The HMAC key in force (None = unsigned). Read-only; set at construction."""
+        return self._key
+
     # --- write (the only mutation there is) -------------------------------- #
     def append(self, day: int, op: str, item_id: str, detail: str = "", *,
                actor: ActorIdentity | None = None,
@@ -169,6 +175,19 @@ class ProvenanceLog:
         if snap.get("head") not in (None, log.head()):
             raise ValueError("snapshot head does not match its entries")
         return log
+
+    # --- durability: the chain survives a restart (the replay claim, end to end) ---- #
+    def save(self, path: str | Path) -> None:
+        """Persist the chain to disk. On Cloud Run point this at a mounted volume / GCS;
+        the provenance of record must outlive the (frozen, ephemeral) instance."""
+        p = Path(path)
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text(json.dumps(self.snapshot(), indent=2, sort_keys=True) + "\n")
+
+    @classmethod
+    def load(cls, path: str | Path, signing_key: bytes | None = None) -> ProvenanceLog:
+        """Restore a chain from disk, refusing a tampered file (restore() verifies)."""
+        return cls.restore(json.loads(Path(path).read_text()), signing_key=signing_key)
 
 
 def verify_entries(entries: list[dict], key: bytes | None) -> VerifyReport:

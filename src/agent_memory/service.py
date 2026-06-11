@@ -123,6 +123,18 @@ class MemoryService:
         apply_retention(pool, now_day, self.policy, self.audit)
         self._index_dirty = True
 
+    # --- PAG durability ----------------------------------------------------- #
+    def save_pag(self, path: str | Path) -> None:
+        """Persist the provenance chain so it survives a restart (replay durability)."""
+        self.pag.save(path)
+
+    def restore_pag(self, path: str | Path) -> None:
+        """Adopt a verified chain from disk; refuses a tampered file. New operations
+        continue from the restored head, so provenance is continuous across restarts —
+        even though the in-memory store is rebuilt fresh from the corpus."""
+        self.pag = ProvenanceLog.load(path, signing_key=self.pag.signing_key)
+        self.audit.pag = self.pag
+
     def attest_model(self, now_day: int = 0) -> dict:
         """Upgrade the embedder's identity to weight-fingerprint grade (Paramesphere S0).
 

@@ -192,10 +192,16 @@ only**. Every audit operation tees into a hash-chained, actor-attributed log (th
 - **actor identity** — `agent_id` / `model_id` / `attestation_level` record *who* performed each operation, under which model identity, at which attestation grade (`none < declared < config-hash < behavioral < weight-fingerprint`);
 - **optional signing** — set `PAG_SIGNING_KEY` and every entry carries an HMAC; without it entries are honestly **unsigned** and `verify()` says so;
 - **replay snapshots** — `snapshot()` exports the chain; `restore()` refuses a tampered one;
+- **durability** — `save_pag(path)` / `restore_pag(path)` persist and adopt a *verified* chain across restarts, so provenance outlives the (frozen, ephemeral) Cloud Run instance; new operations continue from the restored head even though the in-memory store is rebuilt fresh. Point the path at a mounted volume / GCS in production;
 - **model attestation first** — the chain's first entry records the embedding model's identity (`MemoryService.attest_model()` upgrades it to weight-fingerprint grade by digesting the loaded weights — deliberately not done at construction, which must never download a model).
 
 Endpoints: `GET /pag/verify` (public — integrity status) and `GET /pag/snapshot` (admin).
-The claims are pinned as executable assertions in `tests/test_pag.py`.
+The claims are pinned in `tests/test_pag.py`.
+
+**Federation seam.** The cason-heritage Keeper (`memory-client.js`) consumes this service over
+`POST /recall`, `POST /ingest`, and `GET /stats`; that exact contract (and PAG integrity over
+HTTP) is pinned in `tests/test_serve.py` so the cross-repo seam can't drift out from under the
+consumer — the service-side half of Stage 0.
 
 ---
 
