@@ -28,5 +28,24 @@ def get_embedder():
 def build_service() -> MemoryService:
     # Full lifecycle (recency + consolidation + supersession) enabled for the API.
     # index_type stays "flat" (exact) by default; INDEX_TYPE=hnsw opts into ANN.
-    return MemoryService(policy=MemoryPolicy(), embedder=get_embedder(),
-                         index_type=os.environ.get("INDEX_TYPE", "flat"))
+    kwargs = dict(policy=MemoryPolicy(), embedder=get_embedder(),
+                  index_type=os.environ.get("INDEX_TYPE", "flat"))
+
+    # Durable record when DATABASE_URL is set; otherwise the original in-RAM
+    # service, unchanged. Absence of a DSN is a valid configuration, not an
+    # error — but on a scale-to-zero host it means memory does not survive
+    # between requests, which is only acceptable for a demo.
+    from agent_memory.pg_store import dsn_from_env
+    dsn = dsn_from_env()
+    if not dsn:
+        return MemoryService(**kwargs)
+
+    from agent_memory.pg_store import PgStore
+    from agent_memory.persistent_service import PersistentMemoryService
+    store = PgStore(
+        dsn,
+        namespace=os.environ.get("MEMORY_NAMESPACE", "default"),
+        dimension=int(os.environ.get("EMBEDDING_DIM", "384")),
+    )
+    store.ensure_schema()
+    return PersistentMemoryService(store=store, **kwargs)
