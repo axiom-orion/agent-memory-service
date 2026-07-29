@@ -16,8 +16,14 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from agent_memory.firestore_store import FirestoreStore, firestore_project_from_env
-from agent_memory.types import MemoryItem, MemoryType
+# google-cloud-firestore is an OPTIONAL runtime dependency (extras: firestore).
+# CI installs it via [dev] so this backend is genuinely exercised, but someone
+# who installed only the base package must still get a passing suite rather than
+# a wall of ModuleNotFoundError.
+pytest.importorskip("google.cloud.firestore", reason="pip install '.[firestore]'")
+
+from agent_memory.firestore_store import FirestoreStore, firestore_project_from_env  # noqa: E402
+from agent_memory.types import MemoryItem, MemoryType  # noqa: E402
 
 
 # ---- a minimal fake of the Firestore surface this store touches -------------
