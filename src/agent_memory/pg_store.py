@@ -31,7 +31,7 @@ from __future__ import annotations
 
 import json
 import os
-from typing import Iterable
+from collections.abc import Iterable
 
 import numpy as np
 
@@ -186,7 +186,9 @@ class PgStore:
 
     # ---- read -------------------------------------------------------------
     def load(self, *, include_superseded: bool = True) -> list[MemoryItem]:
-        where = "WHERE namespace = %s" + ("" if include_superseded else " AND superseded_by IS NULL")
+        where = "WHERE namespace = %s"
+        if not include_superseded:
+            where += " AND superseded_by IS NULL"
         with self._connect() as conn:
             with conn.cursor() as cur:
                 cur.execute(f"SELECT {_COLUMNS} FROM memory_items {where} ORDER BY created_day, id",

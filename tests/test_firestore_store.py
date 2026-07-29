@@ -51,7 +51,10 @@ class _Col:
 
 
 class _Limited(_Col):
-    def __init__(self, backing, n): super().__init__(backing); self.n = n
+    def __init__(self, backing, n):
+        super().__init__(backing)
+        self.n = n
+
     def stream(self):
         return iter(list(super().stream())[:self.n])
 

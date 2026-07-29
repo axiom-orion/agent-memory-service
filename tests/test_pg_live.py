@@ -12,7 +12,6 @@ database.
 """
 from __future__ import annotations
 
-import os
 import uuid
 
 import numpy as np
@@ -63,7 +62,8 @@ def test_write_then_read_in_a_fresh_store(store):
     assert loaded[0].id == "M0001"
     assert loaded[0].value == "Phoebe Munden"
     assert loaded[0].provenance == ["Glynn Co. GA deed book"]
-    np.testing.assert_allclose(loaded[0].embedding, np.linspace(0, 1, 384, dtype=np.float32), atol=1e-6)
+    expected = np.linspace(0, 1, 384, dtype=np.float32)
+    np.testing.assert_allclose(loaded[0].embedding, expected, atol=1e-6)
 
 
 def test_upsert_is_idempotent_and_updates_in_place(store):
