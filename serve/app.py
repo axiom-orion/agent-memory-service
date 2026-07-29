@@ -62,9 +62,35 @@ def _load_corpus() -> list[dict]:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     svc = build_service()
-    records = _load_corpus()
-    svc.ingest_records(records)
-    now = max((r.get("ts_day", 0) for r in records), default=0) + 1
+    durable = getattr(svc, "store", None) is not None
+    hydrated = getattr(svc, "hydrated", 0)
+
+    # The bundled corpus is a DEMO warmup, and it must not be seeded into a
+    # durable namespace. Two reasons, both real:
+    #   1. It is synthetic ("I live in Denver"). A caller's durable memory would
+    #      permanently contain someone else's fake facts.
+    #   2. Ids are assigned from the episodic count, so re-seeding on top of a
+    #      hydrated store mints NEW ids for the same records — the corpus would
+    #      duplicate itself on every cold start and grow without bound.
+    # SEED_CORPUS=always forces it (useful for a durable demo); =never suppresses it.
+    mode = os.environ.get("SEED_CORPUS", "auto").lower()
+    should_seed = mode == "always" or (mode == "auto" and not durable)
+
+    records = _load_corpus() if should_seed else []
+    if records:
+        svc.ingest_records(records)
+    elif durable:
+        print(f"[warmup] durable record: hydrated {hydrated} memories; "
+              f"bundled corpus skipped (SEED_CORPUS={mode})")
+
+    # The clock comes from whatever the service actually holds — the seeded
+    # corpus, or the rehydrated record on a cold start.
+    if records:
+        now = max((r.get("ts_day", 0) for r in records), default=0) + 1
+    else:
+        held = svc.episodic.items() + svc.semantic.all()
+        now = max((i.created_day for i in held), default=0) + 1
+
     svc.consolidate(now)          # episodic -> semantic, supersede stale fact values
     svc.forget(now)               # apply TTL / prune superseded past grace
     svc.rebuild_index(now)        # build the FAISS index over the active set
@@ -73,6 +99,8 @@ async def lifespan(app: FastAPI):
     _state["now"] = now
     _state["backend"] = os.environ.get("EMBEDDINGS_BACKEND", "local")
     _state["corpus_size"] = len(records)
+    _state["durable"] = durable
+    _state["hydrated"] = hydrated
     yield
     _state.clear()
 
@@ -202,8 +230,14 @@ class StatsResp(BaseModel):
 # /healthz on *.run.app, so that path never reaches the container.
 @app.get("/health")
 def health():
+    # `durable` and `hydrated` are the two facts an operator most needs and
+    # cannot otherwise see: whether memory survives this instance, and whether
+    # this instance actually recovered anything on boot. Without them, a
+    # misconfigured deployment looks identical to a working one.
     return {"status": "ok", "embeddings_backend": _state.get("backend", "local"),
-            "corpus_size": _state.get("corpus_size", 0)}
+            "corpus_size": _state.get("corpus_size", 0),
+            "durable": _state.get("durable", False),
+            "hydrated_on_boot": _state.get("hydrated", 0)}
 
 
 @app.post("/recall", response_model=RecallResp)

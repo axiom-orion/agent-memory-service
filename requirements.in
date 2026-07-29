@@ -16,3 +16,14 @@ numpy==1.26.4
 fastapi==0.115.6
 uvicorn[standard]==0.32.1
 pydantic==2.10.3
+
+# Durable record (Postgres + pgvector). Optional at runtime: with no DATABASE_URL
+# the service falls back to the original in-RAM behaviour, so the image still boots
+# without a database. [binary] avoids needing libpq/build tools in the image.
+psycopg[binary]==3.2.3
+
+# Durable record on Firestore (the default backend on Cloud Run: no connection
+# string and no secret -- it authenticates as the runtime service account).
+# Optional, like psycopg: with no backend configured the service falls back to
+# the original in-RAM behaviour and still boots.
+google-cloud-firestore==2.19.0

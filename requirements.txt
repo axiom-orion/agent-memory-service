@@ -148,3 +148,14 @@ websockets==16.0
 
 # The following packages are considered to be unsafe in a requirements file:
 # setuptools
+
+# Added ahead of the next `make lock` run (pip-compile needs Docker, unavailable
+# here). No wheel hashes are in use, so a manual pin is consistent with the rest
+# of this file. Regenerate with `make lock` to fold it in properly.
+psycopg[binary]==3.2.3
+
+# Durable record on Firestore (the default backend on Cloud Run: no connection
+# string and no secret -- it authenticates as the runtime service account).
+# Optional, like psycopg: with no backend configured the service falls back to
+# the original in-RAM behaviour and still boots.
+google-cloud-firestore==2.19.0
