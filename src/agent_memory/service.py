@@ -24,6 +24,7 @@ import numpy as np
 from .config import MemoryPolicy, settings
 from .consolidation import consolidate
 from .embeddings import Embedder
+from .extractor import Extractor
 from .pag import (
     ActorIdentity,
     AttestedAuditLog,
@@ -92,22 +93,30 @@ class MemoryService:
         self._index_dirty = True
         return item
 
-    def ingest_records(self, records: list[dict]) -> None:
+    def ingest_records(self, records: list[dict], extractor: Extractor | None = None) -> None:
+        """Register records as episodic memories.
+
+        Without an `extractor`, each record's own `subject`/`attribute`/`value` fields are
+        trusted (an upstream agent already extracted them). With one, those fields are
+        IGNORED and the fact is extracted from `text` -- the path free-text input takes."""
         # batch-embed for speed, then register
         texts = [r["text"] for r in records]
         vecs = self.embedder.encode(texts)
         for r, v in zip(records, vecs, strict=True):
+            if extractor is not None:
+                subject, attribute, value = extractor.extract(r)
+            else:
+                subject, attribute, value = r.get("subject"), r.get("attribute"), r.get("value")
             item = MemoryItem(
                 id=r["id"], content=r["text"], mtype=MemoryType.EPISODIC,
                 created_day=r["ts_day"], importance=r.get("importance", 0.5),
-                subject=r.get("subject"), attribute=r.get("attribute"),
-                value=r.get("value"), provenance=[r.get("provenance", "")])
+                subject=subject, attribute=attribute,
+                value=value, provenance=[r.get("provenance", "")])
             item.embedding = v
             self._dim = v.shape[0]
             self.episodic.add(item)
             self.audit.record(r["ts_day"], "write", item.id,
-                              f"{r.get('attribute')}={r.get('value')}"
-                              if r.get("attribute") else "episodic")
+                              f"{attribute}={value}" if attribute else "episodic")
         self._index_dirty = True
 
     # --- lifecycle ---------------------------------------------------------- #

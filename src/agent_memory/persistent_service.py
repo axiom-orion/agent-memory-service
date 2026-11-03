@@ -16,6 +16,7 @@ been a no-op that looked wired.
 """
 from __future__ import annotations
 
+from .extractor import Extractor
 from .pg_store import PgStore
 from .service import MemoryService
 from .types import MemoryItem, MemoryType
@@ -84,9 +85,9 @@ class PersistentMemoryService(MemoryService):
         self.store.upsert([item])   # one row, not a full flush — writes stay O(1)
         return item
 
-    def ingest_records(self, records: list[dict]) -> None:
+    def ingest_records(self, records: list[dict], extractor: Extractor | None = None) -> None:
         before = {it.id for it in self._all_items()}
-        super().ingest_records(records)
+        super().ingest_records(records, extractor)
         new = [it for it in self._all_items() if it.id not in before]
         if new:
             self.store.upsert(new)

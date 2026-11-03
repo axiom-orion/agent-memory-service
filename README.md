@@ -20,6 +20,7 @@ Everything runs on CPU, no external services. The numbers below are produced by 
 | +recency | 0.667 | 0.917 | 0.583 | 35.0 |
 | +consolidation | 0.833 | 1.000 | 0.583 | 21.6 |
 | **+supersession (full)** | **1.000** | **1.000** | **0.000** | **21.2** |
+| +supersession, facts extracted from text | 1.000 | 1.000 | 0.000 | 21.2 |
 
 The point is sharpest on **changing facts** — the ones whose value was updated over the timeline:
 
@@ -29,6 +30,7 @@ The point is sharpest on **changing facts** — the ones whose value was updated
 | +recency | 0.429 | 1.000 |
 | +consolidation | 0.714 | 1.000 |
 | **+supersession (full)** | **1.000** | **0.000** |
+| +supersession, facts extracted from text | 1.000 | 0.000 |
 
 Stable facts (name, home city, employee ID) score **1.000 acc@1 under every policy** — the service adds no regression on what flat retrieval already handles.
 
@@ -38,7 +40,21 @@ Stable facts (name, home city, employee ID) score **1.000 acc@1 under every poli
 - **Recency helps, but it is a blunt instrument.** Weighting newer memories higher lifts changing-fact accuracy to 0.429 — but it cannot be turned up far without burying *old-but-stable* facts under recent noise, so it never removes stale values (stale@5 stays 1.000). Recency is a tiebreaker, not a correctness mechanism.
 - **Consolidation gets the current value to rank 1** (0.714) by collapsing repeated statements into terse semantic facts and letting recency break ties — and it cuts context tokens **32.5 → 21.6** because the agent grounds on one-line facts instead of verbose logs. But without supersession the deduped *old* values still coexist, so stale@5 remains 1.000: the stale fact is still retrievable, just lower.
 - **Supersession is the correctness mechanism.** Keying semantic facts on `(subject, attribute)` and marking superseded values inactive means the only candidate for a changed fact is its current value: acc@1 **1.000**, stale@5 **0.000**. The superseded values are not deleted — they are retained, marked, and queryable through the audit log, which is what an auditable/regulated deployment requires.
+- **The last row runs without the structured triples.** Every other row ingests the `(subject, attribute, value)` fields the generator emitted; this one ignores them and extracts each fact from the statement text (`RuleExtractor`), so it measures the whole path free text takes. It matches the full row because extraction recovers all 32 triples exactly — measured below.
 - **Honest note on tuning:** the recency weight (0.25) was chosen so a strong similarity match isn't overturned by recent noise; it was not tuned to the gold answers, and the supersession result is recency-independent (once stale values are inactive, the current value is the only candidate for that key regardless of weighting).
+
+### Extraction — the step the table above depends on
+
+Supersession only works if every statement of a fact lands on the **same key**: "my manager is Alice" and "my boss is now Bob" must both become `current_manager`, or the stale value survives as a separate fact and comes back. So extraction is **schema-locked** — an extractor may only emit an attribute from `FACT_SCHEMA`, and a statement it can't place there stays an episodic memory instead of being guessed into the wrong slot — and it **abstains** on statements that assert no current first-person fact.
+
+| extractor · statements | precision ↑ | recall ↑ | false facts ↓ |
+|---|---|---|---|
+| rule · corpus (42 generated statements) | 1.000 | 1.000 | 0 / 10 |
+| rule · held-out (42 statements in unseen phrasings) | 1.000 | 0.864 | 0 / 20 |
+
+- **Corpus = wiring, not generalization.** `RuleExtractor`'s patterns cover the generator's phrasings, so recovering all 32 labelled triples checks that ingestion really runs extraction; it says nothing about new phrasings.
+- **Held-out = generalization.** [`eval/extraction_cases.jsonl`](eval/extraction_cases.jsonl) holds 22 statements in phrasings the generator never uses ("my boss is…", "I report to…", "these days I'm on…") and 20 that must yield **no** fact: negation ("I'm no longer on Project Atlas"), hypotheticals ("I might move to…"), questions, other people's facts ("Sam's manager is…", "my manager's manager is…") and past values ("my manager was…"). It was written before the extractor was scored on it and not tuned afterwards. Zero wrong or false facts; the 3 misses are phrasings with no pattern ("They promoted me to Lead Analyst", "My desk is on…", "Please call me…") — a miss leaves the statement episodic, which is the safe failure.
+- **The Claude extractor** (`LLMExtractor`) is constrained the same way: a JSON-schema output whose attribute must come from `FACT_SCHEMA`, a subject that must be the user, and a value that must appear verbatim in the statement, with refusals and malformed or truncated output yielding no fact. Its behaviour is pinned by tests against a fake client; its *quality* needs credentials — `python eval/run_eval.py --llm` adds its rows. Those numbers are not in this README because they have not been run.
 
 ---
 
@@ -138,7 +154,7 @@ flowchart LR
 | scoring | `scoring.py` | `w_sim·cosine + w_rec·exp(-age/τ) + w_imp·importance` |
 | retention | `retention.py` | TTL expiry, pruning of superseded facts past a grace window |
 | audit | `audit.py` | append-only operation log (the explainability substrate) |
-| extractor | `extractor.py` | structured passthrough; optional Anthropic LLM extraction (production) |
+| extractor | `extractor.py` | schema-locked `FACT_SCHEMA`; structured passthrough, deterministic `RuleExtractor`, Claude `LLMExtractor` (JSON-schema output, values must be grounded in the text); all abstain rather than guess |
 | index | `vector_index.py` | FAISS `IndexIDMap2` over int64 ids; exact `IndexFlatIP` by default (HNSW opt-in); `rebuild()` from the active set, `remove()` on flat |
 | service | `service.py` | `remember` / `consolidate` / `recall` / `forget` facade; owns the str↔int id map, `get_active_vectors()`, and `rebuild_index()` |
 
@@ -214,7 +230,7 @@ The reference build is in-memory (FAISS + Python) so the eval is reproducible wi
 ## Scope and honest notes
 
 - **Synthetic data, deterministic** (`SEED=23`): no real-person PII, and every gold answer is derivable from the generated timeline. The scenario is small (42 interactions, 12 queries) — enough to separate the policies cleanly and run fast/deterministically, not a claim about behaviour at production scale. The FAISS index and batched embedding cache are there so the same code scales.
-- **Fact extraction is upstream.** The eval assumes structured `(subject, attribute, value)` triples (as if emitted by an agent or the optional LLM extractor). Free-text fact extraction quality is its own problem and is out of scope for this measurement.
+- **Extraction is measured, but small and partly synthetic.** The headline table holds with facts extracted from text, and the held-out set measures new phrasings (precision 1.000, recall 0.864). Both are 42 statements, and the held-out cases were written by the same author as the rule extractor, so treat the recall as indicative, not a benchmark. The Claude extractor's quality is unmeasured here (it needs credentials: `--llm`).
 - **Provenance comes in two grades here.** Item-level provenance (which statements back a fact) is source attribution, not proof. The **PAG** slice adds the cryptographic part — a hash chain with optional HMAC signing over the operation log — but only for the append-only slice; the consolidation/TTL layer that mutates and forgets is memory, not provenance-of-record. Signing requires a configured key; per-request agent identity on the HTTP surface is future work (today the writer identity is service-level).
 - **Consolidation here is rule-based** (group-by-key, latest-wins). Semantic summarisation/clustering of non-fact episodic memories and an LLM answer-synthesis layer over the recalled, cited context are the natural next extensions.
 
@@ -237,7 +253,7 @@ agent-memory-service/
 │   ├── types.py  config.py  embeddings.py  scoring.py  vector_index.py
 │   ├── stores.py                 # working / episodic / semantic / procedural
 │   ├── consolidation.py  retention.py  audit.py  extractor.py  service.py
-├── eval/      # run_eval.py, queries.jsonl, results.md, results.json
+├── eval/      # run_eval.py, queries.jsonl, extraction_cases.jsonl, results.md, results.json
 ├── tests/     # pytest: stores, consolidation, audit, retrieval properties
 ├── scripts/   # demo.py
 ├── Makefile   pyproject.toml   requirements.txt   .github/workflows/ci.yml

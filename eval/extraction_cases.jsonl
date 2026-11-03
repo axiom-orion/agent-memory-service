@@ -1,0 +1,42 @@
+{"id": "X001", "category": "paraphrase", "text": "My boss is Priya Shah.", "attribute": "current_manager", "value": "Priya Shah"}
+{"id": "X002", "category": "paraphrase", "text": "I report to Priya Shah these days.", "attribute": "current_manager", "value": "Priya Shah"}
+{"id": "X003", "category": "paraphrase", "text": "My new manager is Marcus Webb.", "attribute": "current_manager", "value": "Marcus Webb"}
+{"id": "X004", "category": "paraphrase", "text": "I'm currently working on Project Delta.", "attribute": "current_project", "value": "Project Delta"}
+{"id": "X005", "category": "paraphrase", "text": "These days I'm on Project Orion.", "attribute": "current_project", "value": "Project Orion"}
+{"id": "X006", "category": "paraphrase", "text": "My current project is Project Vega.", "attribute": "current_project", "value": "Project Vega"}
+{"id": "X007", "category": "paraphrase", "text": "My title is Principal Analyst.", "attribute": "job_title", "value": "Principal Analyst"}
+{"id": "X008", "category": "paraphrase", "text": "They promoted me to Lead Analyst.", "attribute": "job_title", "value": "Lead Analyst"}
+{"id": "X009", "category": "paraphrase", "text": "My job title changed to Data Scientist.", "attribute": "job_title", "value": "Data Scientist"}
+{"id": "X010", "category": "paraphrase", "text": "My desk is on Floor 5, Building C.", "attribute": "office_location", "value": "Floor 5, Building C"}
+{"id": "X011", "category": "paraphrase", "text": "My office moved to Floor 2, Building B.", "attribute": "office_location", "value": "Floor 2, Building B"}
+{"id": "X012", "category": "paraphrase", "text": "The main metric I track is monthly recurring revenue.", "attribute": "primary_metric", "value": "monthly recurring revenue"}
+{"id": "X013", "category": "paraphrase", "text": "I've switched to Neovim as my editor.", "attribute": "preferred_ide", "value": "Neovim"}
+{"id": "X014", "category": "paraphrase", "text": "My preferred IDE is IntelliJ IDEA.", "attribute": "preferred_ide", "value": "IntelliJ IDEA"}
+{"id": "X015", "category": "paraphrase", "text": "This sprint the goal is to migrate the billing service.", "attribute": "sprint_goal", "value": "migrate the billing service"}
+{"id": "X016", "category": "paraphrase", "text": "My name is Sam Okafor.", "attribute": "name", "value": "Sam Okafor"}
+{"id": "X017", "category": "paraphrase", "text": "Please call me Sam Okafor.", "attribute": "name", "value": "Sam Okafor"}
+{"id": "X018", "category": "paraphrase", "text": "My employee number is E-55102.", "attribute": "employee_id", "value": "E-55102"}
+{"id": "X019", "category": "paraphrase", "text": "I moved to Boulder last year, so I live in Boulder now.", "attribute": "home_city", "value": "Boulder"}
+{"id": "X020", "category": "paraphrase", "text": "I started here on 2021-02-14.", "attribute": "hire_date", "value": "2021-02-14"}
+{"id": "X021", "category": "paraphrase", "text": "My time zone is Pacific Time.", "attribute": "timezone", "value": "Pacific Time"}
+{"id": "X022", "category": "paraphrase", "text": "I work in Eastern Time.", "attribute": "timezone", "value": "Eastern Time"}
+{"id": "X023", "category": "negation", "text": "My manager is not Bob Tran.", "attribute": null, "value": null}
+{"id": "X024", "category": "negation", "text": "I'm no longer on Project Atlas.", "attribute": null, "value": null}
+{"id": "X025", "category": "negation", "text": "I don't use VS Code anymore.", "attribute": null, "value": null}
+{"id": "X026", "category": "negation", "text": "My title isn't Staff Analyst yet.", "attribute": null, "value": null}
+{"id": "X027", "category": "hypothetical", "text": "If my manager were Dana Kim, I'd stay.", "attribute": null, "value": null}
+{"id": "X028", "category": "hypothetical", "text": "I might move to Project Zephyr next quarter.", "attribute": null, "value": null}
+{"id": "X029", "category": "hypothetical", "text": "I'd love for my title to be Principal Analyst someday.", "attribute": null, "value": null}
+{"id": "X030", "category": "hypothetical", "text": "Next month my manager will probably be Lena Ortiz.", "attribute": null, "value": null}
+{"id": "X031", "category": "question", "text": "Is my manager still Bob Tran?", "attribute": null, "value": null}
+{"id": "X032", "category": "question", "text": "What's my job title again?", "attribute": null, "value": null}
+{"id": "X033", "category": "question", "text": "Am I on Project Cygnus?", "attribute": null, "value": null}
+{"id": "X034", "category": "third_party", "text": "Sam's manager is Bob Tran.", "attribute": null, "value": null}
+{"id": "X035", "category": "third_party", "text": "My colleague works on Project Delta.", "attribute": null, "value": null}
+{"id": "X036", "category": "third_party", "text": "My wife lives in Boulder.", "attribute": null, "value": null}
+{"id": "X037", "category": "third_party", "text": "My manager's manager is Grace Liu.", "attribute": null, "value": null}
+{"id": "X038", "category": "third_party", "text": "Bob Tran is my manager's boss.", "attribute": null, "value": null}
+{"id": "X039", "category": "past", "text": "My manager was Alice Reyes before the reorg.", "attribute": null, "value": null}
+{"id": "X040", "category": "past", "text": "I used to work on Project Atlas.", "attribute": null, "value": null}
+{"id": "X041", "category": "noise", "text": "Book a room for the project kickoff.", "attribute": null, "value": null}
+{"id": "X042", "category": "noise", "text": "Ask my manager about the offsite.", "attribute": null, "value": null}
