@@ -87,12 +87,16 @@ class PersistentMemoryService(MemoryService):
 
     def ingest_records(self, records: list[dict],
                        extractor: Extractor | None = None) -> list[str]:
-        before = {it.id for it in self._all_items()}
-        unavailable = super().ingest_records(records, extractor)
-        new = [it for it in self._all_items() if it.id not in before]
-        if new:
-            self.store.upsert(new)
+        items, unavailable = self._ingest(records, extractor)
+        if items:
+            self.store.upsert(items)   # exactly the items this call created
         return unavailable
+
+    def reextract(self, item_ids: list[str], extractor: Extractor) -> list[str]:
+        updated, still = self._reextract(item_ids, extractor)
+        if updated:
+            self.store.upsert(updated)  # the durable row gets the fact, not just RAM
+        return still
 
     def consolidate(self, now_day: int) -> None:
         super().consolidate(now_day)

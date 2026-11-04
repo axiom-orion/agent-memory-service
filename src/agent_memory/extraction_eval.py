@@ -17,7 +17,7 @@ Precision is None when nothing was extracted at all: an extractor that always ab
 has no precision, not a perfect one. The gold subject defaults to SUBJECT ("user").
 Values compare case-insensitively after trimming whitespace ("Bob Tran" == "bob tran ").
 Both a wrong and a false fact land on a supersession key and can retire a correct value,
-which is why precision -- not recall -- is the number that must stay at 1.000.
+so `wrong` and `false` -- not recall -- are the counts held at zero (tests/test_extractor.py).
 """
 from __future__ import annotations
 

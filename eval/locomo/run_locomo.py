@@ -91,6 +91,7 @@ def run_qa(samples: list[LocomoSample], extract: bool, k: int) -> dict:
 
     per_cat: dict[int, list[float]] = defaultdict(list)
     agg: list[float] = []
+    unavailable = 0  # turns whose extraction hit an outage: reported, never hidden
     for sample in samples:
         svc = MemoryService(policy=policy)
         if extract:
@@ -101,6 +102,7 @@ def run_qa(samples: list[LocomoSample], extract: bool, k: int) -> dict:
                     subj, attr, val = ex.extract({"text": f"{t.speaker}: {t.text}"})
                 except ExtractionUnavailable:  # an outage, not an answer: kept as text only
                     subj, attr, val = NO_FACT
+                    unavailable += 1
                 svc.remember(f"{t.speaker}: {t.text}", day=t.session,
                              subject=subj, attribute=attr, value=val)
             svc.consolidate(_now_day(sample))
@@ -126,7 +128,7 @@ def run_qa(samples: list[LocomoSample], extract: bool, k: int) -> dict:
 
     return {
         "mode": "qa", "metric": "locomo_token_f1", "extract": extract,
-        "overall_f1": mean(agg), "n": len(agg),
+        "overall_f1": mean(agg), "n": len(agg), "extract_unavailable_turns": unavailable,
         "by_category_f1": {CATEGORY_NAMES[c]: mean(v) for c, v in sorted(per_cat.items())},
     }
 

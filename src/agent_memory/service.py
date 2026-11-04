@@ -24,7 +24,7 @@ import numpy as np
 from .config import MemoryPolicy, settings
 from .consolidation import consolidate
 from .embeddings import Embedder
-from .extractor import NO_FACT, ExtractionUnavailable, Extractor, Fact
+from .extractor import NO_FACT, ExtractionUnavailable, Extractor, Fact, StructuredExtractor
 from .pag import (
     ActorIdentity,
     AttestedAuditLog,
@@ -37,6 +37,9 @@ from .scoring import score
 from .stores import EpisodicMemory, ProceduralMemory, SemanticMemory, WorkingMemory
 from .types import MemoryItem, MemoryType
 from .vector_index import VectorIndex, VectorIndexConfig
+
+EXTRACT_UNAVAILABLE = "extract-unavailable"  # audit op: stored without a fact; reextract it
+REQUIRED_RECORD_FIELDS = ("id", "text", "ts_day")
 
 
 class MemoryService:
@@ -96,32 +99,42 @@ class MemoryService:
     def ingest_records(self, records: list[dict],
                        extractor: Extractor | None = None) -> list[str]:
         """Register records as episodic memories. Returns the ids of records whose
-        extraction was unavailable (see below); empty without an extractor.
+        extraction was unavailable (see below); empty for the default extractor.
 
-        Without an `extractor`, each record's own `subject`/`attribute`/`value` fields are
-        trusted (an upstream agent already extracted them). With one, those fields are
-        IGNORED and the fact is extracted from `text` -- the path free-text input takes.
+        By default each record's own `subject`/`attribute`/`value` fields are trusted
+        (StructuredExtractor: an upstream agent already extracted them). With an
+        `extractor`, those fields are IGNORED and the fact is extracted from `text` --
+        the path free-text input takes.
 
-        Every fact is extracted before anything is stored, so an extractor error leaves
-        the store as it was rather than half-ingesting the batch. A record whose
-        extraction is *unavailable* (rate limit, outage) is still stored, as plain
-        episodic text with no fact, and audited as `extract-unavailable` so a retry pass
-        can find it -- a correction is never silently filed as "no fact here"."""
+        The batch is validated and every fact extracted before anything is stored, so a
+        malformed record or an extractor error leaves the store as it was rather than
+        half-ingesting the batch. A record whose extraction is *unavailable* (rate
+        limit, outage) is still stored, as plain episodic text with no fact, audited as
+        EXTRACT_UNAVAILABLE and returned: pass the ids to `reextract` once the extractor
+        is back. A correction is never silently filed as "no fact here"."""
+        return self._ingest(records, extractor)[1]
+
+    def _ingest(self, records: list[dict], extractor: Extractor | None
+                ) -> tuple[list[MemoryItem], list[str]]:
+        """ingest_records' work; also returns the items it created (for write-through)."""
+        for i, r in enumerate(records):
+            missing = [k for k in REQUIRED_RECORD_FIELDS if k not in r]
+            if missing or not isinstance(r["text"], str):
+                raise ValueError(f"record {i}: missing {missing} or non-string text")
+        extractor = extractor or StructuredExtractor()
         facts: list[Fact] = []
-        unavailable: list[str] = []
-        for r in records:
-            if extractor is None:
-                facts.append((r.get("subject"), r.get("attribute"), r.get("value")))
-                continue
+        unavailable: set[int] = set()  # by position: ids need not be unique in a batch
+        for i, r in enumerate(records):
             try:
                 facts.append(extractor.extract(r))
             except ExtractionUnavailable:
                 facts.append(NO_FACT)
-                unavailable.append(r["id"])
+                unavailable.add(i)
         # batch-embed for speed, then register
-        texts = [r["text"] for r in records]
-        vecs = self.embedder.encode(texts)
-        for r, v, (subject, attribute, value) in zip(records, vecs, facts, strict=True):
+        vecs = self.embedder.encode([r["text"] for r in records])
+        items: list[MemoryItem] = []
+        for i, (r, v, (subject, attribute, value)) in enumerate(
+                zip(records, vecs, facts, strict=True)):
             item = MemoryItem(
                 id=r["id"], content=r["text"], mtype=MemoryType.EPISODIC,
                 created_day=r["ts_day"], importance=r.get("importance", 0.5),
@@ -132,11 +145,44 @@ class MemoryService:
             self.episodic.add(item)
             self.audit.record(r["ts_day"], "write", item.id,
                               f"{attribute}={value}" if attribute else "episodic")
-            if r["id"] in unavailable:
-                self.audit.record(r["ts_day"], "extract-unavailable", item.id,
-                                  "stored without a fact; retry")
+            if i in unavailable:
+                self.audit.record(r["ts_day"], EXTRACT_UNAVAILABLE, item.id,
+                                  "stored without a fact; reextract")
+            items.append(item)
         self._index_dirty = True
-        return unavailable
+        return items, [records[i]["id"] for i in sorted(unavailable)]
+
+    def reextract(self, item_ids: list[str], extractor: Extractor) -> list[str]:
+        """Extract again from episodic items stored without a fact (after an outage).
+
+        Fills the fact in on the stored item itself -- same item, same id, no duplicate
+        -- and returns the ids that are still unavailable. Unknown ids and items that
+        already carry a fact are skipped; an abstention leaves the item episodic."""
+        return self._reextract(item_ids, extractor)[1]
+
+    def _reextract(self, item_ids: list[str], extractor: Extractor
+                   ) -> tuple[list[MemoryItem], list[str]]:
+        """reextract's work; also returns the items it updated (for write-through)."""
+        wanted = set(item_ids)
+        updated: list[MemoryItem] = []
+        still: list[str] = []
+        for item in self.episodic.items():
+            if item.id not in wanted or item.attribute is not None:
+                continue
+            record = {"id": item.id, "text": item.content, "ts_day": item.created_day}
+            try:
+                subject, attribute, value = extractor.extract(record)
+            except ExtractionUnavailable:
+                still.append(item.id)
+                continue
+            if attribute is None:
+                continue
+            item.subject, item.attribute, item.value = subject, attribute, value
+            self.audit.record(item.created_day, "write", item.id, f"{attribute}={value}")
+            updated.append(item)
+        if updated:
+            self._index_dirty = True
+        return updated, still
 
     # --- lifecycle ---------------------------------------------------------- #
     def consolidate(self, now_day: int) -> None:
