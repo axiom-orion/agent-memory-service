@@ -86,5 +86,220 @@
         "ctx_tokens": 20.6
       }
     }
+  },
+  "+supersession, facts extracted from text": {
+    "overall": {
+      "acc@1": 1.0,
+      "found@5": 1.0,
+      "stale@5": 0.0,
+      "ctx_tokens": 21.167
+    },
+    "by_category": {
+      "changing": {
+        "acc@1": 1.0,
+        "found@5": 1.0,
+        "stale@5": 0.0,
+        "ctx_tokens": 21.571
+      },
+      "stable": {
+        "acc@1": 1.0,
+        "found@5": 1.0,
+        "stale@5": 0.0,
+        "ctx_tokens": 20.6
+      }
+    }
+  },
+  "extraction": {
+    "rule \u00b7 corpus": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "correct": 32,
+      "wrong": 0,
+      "missed": 0,
+      "false": 0,
+      "quiet": 10,
+      "unavailable": 0,
+      "negatives": 10,
+      "by_category": {
+        "fact": {
+          "correct": 32,
+          "wrong": 0,
+          "missed": 0,
+          "false": 0,
+          "quiet": 0,
+          "unavailable": 0
+        },
+        "noise": {
+          "correct": 0,
+          "wrong": 0,
+          "missed": 0,
+          "false": 0,
+          "quiet": 10,
+          "unavailable": 0
+        }
+      }
+    },
+    "rule \u00b7 dev": {
+      "precision": 1.0,
+      "recall": 0.909,
+      "correct": 20,
+      "wrong": 0,
+      "missed": 2,
+      "false": 0,
+      "quiet": 20,
+      "unavailable": 0,
+      "negatives": 20,
+      "by_category": {
+        "paraphrase": {
+          "correct": 20,
+          "wrong": 0,
+          "missed": 2,
+          "false": 0,
+          "quiet": 0,
+          "unavailable": 0
+        },
+        "negation": {
+          "correct": 0,
+          "wrong": 0,
+          "missed": 0,
+          "false": 0,
+          "quiet": 4,
+          "unavailable": 0
+        },
+        "hypothetical": {
+          "correct": 0,
+          "wrong": 0,
+          "missed": 0,
+          "false": 0,
+          "quiet": 4,
+          "unavailable": 0
+        },
+        "question": {
+          "correct": 0,
+          "wrong": 0,
+          "missed": 0,
+          "false": 0,
+          "quiet": 3,
+          "unavailable": 0
+        },
+        "third_party": {
+          "correct": 0,
+          "wrong": 0,
+          "missed": 0,
+          "false": 0,
+          "quiet": 5,
+          "unavailable": 0
+        },
+        "past": {
+          "correct": 0,
+          "wrong": 0,
+          "missed": 0,
+          "false": 0,
+          "quiet": 2,
+          "unavailable": 0
+        },
+        "noise": {
+          "correct": 0,
+          "wrong": 0,
+          "missed": 0,
+          "false": 0,
+          "quiet": 2,
+          "unavailable": 0
+        }
+      }
+    },
+    "rule \u00b7 adversarial": {
+      "precision": 0.909,
+      "recall": 0.588,
+      "correct": 10,
+      "wrong": 0,
+      "missed": 7,
+      "false": 1,
+      "quiet": 35,
+      "unavailable": 0,
+      "negatives": 36,
+      "by_category": {
+        "conditional": {
+          "correct": 0,
+          "wrong": 0,
+          "missed": 0,
+          "false": 0,
+          "quiet": 8,
+          "unavailable": 0
+        },
+        "question": {
+          "correct": 0,
+          "wrong": 0,
+          "missed": 0,
+          "false": 0,
+          "quiet": 2,
+          "unavailable": 0
+        },
+        "hearsay": {
+          "correct": 0,
+          "wrong": 0,
+          "missed": 0,
+          "false": 0,
+          "quiet": 6,
+          "unavailable": 0
+        },
+        "quoted": {
+          "correct": 0,
+          "wrong": 0,
+          "missed": 0,
+          "false": 0,
+          "quiet": 2,
+          "unavailable": 0
+        },
+        "wrong_slot": {
+          "correct": 0,
+          "wrong": 0,
+          "missed": 0,
+          "false": 1,
+          "quiet": 11,
+          "unavailable": 0
+        },
+        "predicate": {
+          "correct": 0,
+          "wrong": 0,
+          "missed": 0,
+          "false": 0,
+          "quiet": 4,
+          "unavailable": 0
+        },
+        "invalid": {
+          "correct": 0,
+          "wrong": 0,
+          "missed": 0,
+          "false": 0,
+          "quiet": 2,
+          "unavailable": 0
+        },
+        "boundary": {
+          "correct": 8,
+          "wrong": 0,
+          "missed": 6,
+          "false": 0,
+          "quiet": 0,
+          "unavailable": 0
+        },
+        "name_like_marker": {
+          "correct": 2,
+          "wrong": 0,
+          "missed": 0,
+          "false": 0,
+          "quiet": 0,
+          "unavailable": 0
+        },
+        "repeated": {
+          "correct": 0,
+          "wrong": 0,
+          "missed": 1,
+          "false": 0,
+          "quiet": 0,
+          "unavailable": 0
+        }
+      }
+    }
   }
 }

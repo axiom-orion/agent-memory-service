@@ -17,13 +17,17 @@ Scored on the gold query set ("what is my current <X>?"):
 Then extraction, the step the ablation above takes as given. The ablation feeds
 the service the structured triples the generator emitted; the "from text" row instead
 extracts every fact from the statement text (RuleExtractor) and runs the same policy.
-Extraction itself is scored on the corpus and on a held-out set of statements written
-in phrasings the generator never uses, including ones that must yield NO fact
-(negation, hypotheticals, questions, other people's facts, past values):
+Extraction itself is scored on three sets, none of them an independent held-out set:
 
-  precision  extracted facts that are exactly right (attribute + value)  (higher better)
-  recall     facts that should be extracted and are                      (higher better)
-  false      statements that assert no current fact but yielded one      (LOWER  better)
+  corpus       the generator's own statements (checks wiring)
+  dev          paraphrases and must-abstain statements, written alongside the rules
+  adversarial  the probes two hostile reviewers used to break an earlier version
+
+Definitions live in agent_memory/extraction_eval.py:
+
+  precision    of the facts extracted, the share with the right subject, slot and value (↑)
+  recall       of the facts stated, the share extracted right                        (↑)
+  false facts  statements that assert no current fact but yielded one               (↓)
 
   python eval/run_eval.py                    # full eval (deterministic given the seed)
   python eval/run_eval.py --llm              # + the Claude extractor (needs credentials)
@@ -40,12 +44,17 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from agent_memory.config import MemoryPolicy  # noqa: E402
+from agent_memory.extraction_eval import (  # noqa: E402
+    adversarial_cases,
+    corpus_cases,
+    load_cases,
+    score_extraction,
+)
 from agent_memory.extractor import Extractor, LLMExtractor, RuleExtractor  # noqa: E402
 from agent_memory.service import MemoryService, load_interactions, load_queries  # noqa: E402
 
 K = 5
 EVAL_DIR = Path(__file__).resolve().parent
-CASES_PATH = EVAL_DIR / "extraction_cases.jsonl"
 
 POLICIES = [
     ("flat-vector", MemoryPolicy(use_recency=False, use_consolidation=False,
@@ -111,71 +120,59 @@ def changing_table(results):
 
 
 # --------------------------------------------------------------------------- #
-# Extraction scoring
+# Extraction tables
 # --------------------------------------------------------------------------- #
-def load_cases(path: Path = CASES_PATH) -> list[dict]:
-    with path.open() as fh:
-        return [json.loads(line) for line in fh if line.strip()]
-
-
-def corpus_cases(records: list[dict]) -> list[dict]:
-    """The corpus as extraction cases: each statement's labelled triple is the gold."""
-    return [{"id": r["id"], "category": "fact" if r.get("attribute") else "noise",
-             "text": r["text"], "attribute": r.get("attribute"), "value": r.get("value")}
-            for r in records]
-
-
-def _same_value(a: str | None, b: str | None) -> bool:
-    return a is not None and b is not None and a.strip().casefold() == b.strip().casefold()
-
-
-def score_extraction(extractor: Extractor, cases: list[dict]) -> dict:
-    """Per-category and overall extraction counts, precision, recall and false facts."""
-    counts: dict[str, dict[str, int]] = defaultdict(lambda: defaultdict(int))
-    for c in cases:
-        _, attribute, value = extractor.extract(c)
-        cat = counts[c["category"]]
-        cat["n"] += 1
-        if c["attribute"] is None:
-            cat["false"] += attribute is not None
-        elif attribute is None:
-            cat["missed"] += 1
-        elif attribute == c["attribute"] and _same_value(value, c["value"]):
-            cat["correct"] += 1
-        else:
-            cat["wrong"] += 1
-    total: dict[str, int] = defaultdict(int)
-    for cat in counts.values():
-        for k, v in cat.items():
-            total[k] += v
-    extracted = total["correct"] + total["wrong"] + total["false"]
-    positives = total["correct"] + total["wrong"] + total["missed"]
-    negatives = sum(cat["n"] for name, cat in counts.items()
-                    if all(c["attribute"] is None for c in cases if c["category"] == name))
-    return {
-        "precision": round(total["correct"] / extracted, 3) if extracted else 1.0,
-        "recall": round(total["correct"] / positives, 3) if positives else 1.0,
-        "false": total["false"], "negatives": negatives,
-        "by_category": {name: dict(cat) for name, cat in counts.items()},
-    }
+def _rate(x: float | None) -> str:
+    return "—" if x is None else f"{x:.3f}"  # None: nothing to divide by (see extraction_eval)
 
 
 def extraction_table(rows: list[tuple[str, dict]]) -> str:
-    out = ["| extractor · statements | precision ↑ | recall ↑ | false facts ↓ |",
-           "|---|---|---|---|"]
+    out = ["| extractor · statements | precision ↑ | recall ↑ | wrong values ↓ "
+           "| false facts ↓ |", "|---|---|---|---|---|"]
     for name, sc in rows:
-        out.append(f"| {name} | {sc['precision']:.3f} | {sc['recall']:.3f} | "
-                   f"{sc['false']} / {sc['negatives']} |")
+        out.append(f"| {name} | {_rate(sc['precision'])} | {_rate(sc['recall'])} | "
+                   f"{sc['wrong']} | {sc['false']} / {sc['negatives']} |")
     return "\n".join(out)
 
 
 def category_table(name: str, sc: dict) -> str:
-    out = [f"| {name} · category | n | correct | missed | wrong | false facts |",
+    out = [f"| {name} · category | correct | wrong | missed | false facts | quiet |",
            "|---|---|---|---|---|---|"]
     for cat, c in sc["by_category"].items():
-        out.append(f"| {cat} | {c.get('n', 0)} | {c.get('correct', 0)} | {c.get('missed', 0)} "
-                   f"| {c.get('wrong', 0)} | {c.get('false', 0)} |")
+        out.append(f"| {cat} | {c['correct']} | {c['wrong']} | {c['missed']} | {c['false']} "
+                   f"| {c['quiet']} |")
     return "\n".join(out)
+
+
+def write_results(results: list[tuple[str, dict]], rows: list[tuple[str, dict]],
+                  extraction: dict[str, dict], records: list[dict], queries: list[dict],
+                  sets: dict[str, list[dict]]) -> Path:
+    """Write eval/results.md and eval/results.json; returns the .md path."""
+    n_change = sum(q["category"] == "changing" for q in queries)
+    md = [
+        "# Memory-policy evaluation\n",
+        f"{len(records)} interactions · {len(queries)} gold queries "
+        f"({n_change} changing facts, {len(queries) - n_change} stable). "
+        "↑ higher is better, ↓ lower is better.\n",
+        "## Overall\n", overall_table(results), "",
+        "## Changing facts only (the supersession cases)\n", changing_table(results), "",
+        "## Extraction\n",
+        "None of these sets is independent of the rules, so none estimates accuracy on "
+        f"real traffic. Corpus = the {len(records)} generated statements (checks wiring). "
+        f"Dev = {len(sets['dev'])} paraphrases and must-abstain statements written alongside "
+        f"the rules. Adversarial = {len(sets['adversarial'])} probes two hostile reviewers "
+        "used to break an earlier version, with gold labels; the fixes were written against "
+        "them, so this set shows those failures are closed, not that new ones are absent. "
+        "A wrong value is the failure that matters: it retires a correct one.\n",
+        extraction_table(rows), "",
+        *[category_table(name, sc) + "\n" for name, sc in rows],
+        "_Generated by `eval/run_eval.py`; deterministic given the seeded sessions._",
+    ]
+    out = EVAL_DIR / "results.md"
+    out.write_text("\n".join(md) + "\n", encoding="utf-8")
+    out.with_suffix(".json").write_text(json.dumps(
+        {**{n: r for n, r in results}, "extraction": extraction}, indent=2), encoding="utf-8")
+    return out
 
 
 def main():
@@ -203,47 +200,29 @@ def main():
         print(f"  [{name}] acc@1={o['acc@1']:.3f} stale@5={o['stale@5']:.3f} "
               f"ctx={o['ctx_tokens']:.1f}", file=sys.stderr)
 
-    cases = load_cases()
+    sets = {"corpus": corpus_cases(records), "dev": load_cases(),
+            "adversarial": adversarial_cases()}
     extractors: list[tuple[str, Extractor]] = [("rule", RuleExtractor())]
     if args.llm:
         extractors.append(("llm", LLMExtractor()))
     extraction: dict[str, dict] = {}
     rows: list[tuple[str, dict]] = []
     for ex_name, ex in extractors:
-        for set_name, set_cases in (("corpus", corpus_cases(records)), ("held-out", cases)):
+        for set_name, set_cases in sets.items():
             sc = score_extraction(ex, set_cases)
             extraction[f"{ex_name} · {set_name}"] = sc
             rows.append((f"{ex_name} · {set_name}", sc))
-            print(f"  [extract {ex_name} · {set_name}] precision={sc['precision']:.3f} "
-                  f"recall={sc['recall']:.3f} false={sc['false']}", file=sys.stderr)
+            print(f"  [extract {ex_name} · {set_name}] precision={_rate(sc['precision'])} "
+                  f"recall={_rate(sc['recall'])} wrong={sc['wrong']} false={sc['false']} "
+                  f"unavailable={sc['unavailable']}", file=sys.stderr)
 
-    n_change = sum(q["category"] == "changing" for q in queries)
-    md = [
-        "# Memory-policy evaluation\n",
-        f"{len(records)} interactions · {len(queries)} gold queries "
-        f"({n_change} changing facts, {len(queries) - n_change} stable). "
-        "↑ higher is better, ↓ lower is better.\n",
-        "## Overall\n", overall_table(results), "",
-        "## Changing facts only (the supersession cases)\n", changing_table(results), "",
-        "## Extraction\n",
-        f"Corpus = the {len(records)} generated statements (the rule extractor's patterns "
-        "cover the generator's phrasings, so this row checks wiring, not generalization). "
-        f"Held-out = {len(cases)} statements in phrasings the generator never uses, "
-        f"{sum(c['attribute'] is None for c in cases)} of which must yield no fact.\n",
-        extraction_table(rows), "",
-        *[category_table(name, sc) + "\n" for name, sc in rows if name.endswith("held-out")],
-        "_Generated by `eval/run_eval.py`; deterministic given the seeded sessions._",
-    ]
     print("\n" + overall_table(results) + "\n\n" + changing_table(results)
           + "\n\n" + extraction_table(rows))
     if embedder is not None:
         print("\n(--embedder hashing: results printed only; results.md is MiniLM's)",
               file=sys.stderr)
         return
-    out = EVAL_DIR / "results.md"
-    out.write_text("\n".join(md) + "\n", encoding="utf-8")
-    out.with_suffix(".json").write_text(json.dumps(
-        {**{n: r for n, r in results}, "extraction": extraction}, indent=2), encoding="utf-8")
+    out = write_results(results, rows, extraction, records, queries, sets)
     print(f"\nwrote {out} and results.json", file=sys.stderr)
 
 

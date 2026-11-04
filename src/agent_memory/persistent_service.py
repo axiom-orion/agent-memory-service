@@ -85,12 +85,14 @@ class PersistentMemoryService(MemoryService):
         self.store.upsert([item])   # one row, not a full flush — writes stay O(1)
         return item
 
-    def ingest_records(self, records: list[dict], extractor: Extractor | None = None) -> None:
+    def ingest_records(self, records: list[dict],
+                       extractor: Extractor | None = None) -> list[str]:
         before = {it.id for it in self._all_items()}
-        super().ingest_records(records, extractor)
+        unavailable = super().ingest_records(records, extractor)
         new = [it for it in self._all_items() if it.id not in before]
         if new:
             self.store.upsert(new)
+        return unavailable
 
     def consolidate(self, now_day: int) -> None:
         super().consolidate(now_day)

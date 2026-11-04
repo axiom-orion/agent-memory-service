@@ -94,10 +94,13 @@ def run_qa(samples: list[LocomoSample], extract: bool, k: int) -> dict:
     for sample in samples:
         svc = MemoryService(policy=policy)
         if extract:
-            from agent_memory.extractor import LLMExtractor
+            from agent_memory.extractor import NO_FACT, ExtractionUnavailable, LLMExtractor
             ex = LLMExtractor(schema=None)  # open vocabulary: LoCoMo's facts fit no fixed schema
             for t in sample.turns:
-                subj, attr, val = ex.extract({"text": f"{t.speaker}: {t.text}"})
+                try:
+                    subj, attr, val = ex.extract({"text": f"{t.speaker}: {t.text}"})
+                except ExtractionUnavailable:  # an outage, not an answer: kept as text only
+                    subj, attr, val = NO_FACT
                 svc.remember(f"{t.speaker}: {t.text}", day=t.session,
                              subject=subj, attribute=attr, value=val)
             svc.consolidate(_now_day(sample))

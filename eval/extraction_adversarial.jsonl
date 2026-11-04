@@ -1,0 +1,53 @@
+{"id": "A001", "category": "conditional", "text": "If Sam leaves, my manager is Bob Tran.", "attribute": null, "value": null}
+{"id": "A002", "category": "conditional", "text": "After the reorg next month, I report to Bob Tran.", "attribute": null, "value": null}
+{"id": "A003", "category": "conditional", "text": "Once the reorg lands, my manager is Bob Tran.", "attribute": null, "value": null}
+{"id": "A004", "category": "conditional", "text": "Suppose my manager is Bob Tran.", "attribute": null, "value": null}
+{"id": "A005", "category": "conditional", "text": "Pretend my manager is Bob Tran.", "attribute": null, "value": null}
+{"id": "A006", "category": "conditional", "text": "Let's say my employee id is E-99999.", "attribute": null, "value": null}
+{"id": "A007", "category": "conditional", "text": "For example, my name is John Smith.", "attribute": null, "value": null}
+{"id": "A008", "category": "conditional", "text": "Draft an email that says my manager is Bob Tran.", "attribute": null, "value": null}
+{"id": "A009", "category": "question", "text": "Can you check whether my manager is Bob Tran? Thanks.", "attribute": null, "value": null}
+{"id": "A010", "category": "question", "text": "Can you tell me whether my manager is Bob Tran? Thanks!", "attribute": null, "value": null}
+{"id": "A011", "category": "hearsay", "text": "Sam thinks my manager is Bob Tran.", "attribute": null, "value": null}
+{"id": "A012", "category": "hearsay", "text": "I think my manager is Bob Tran.", "attribute": null, "value": null}
+{"id": "A013", "category": "hearsay", "text": "Sam said my manager is Bob Tran.", "attribute": null, "value": null}
+{"id": "A014", "category": "hearsay", "text": "Sam told me that my manager is Bob Tran.", "attribute": null, "value": null}
+{"id": "A015", "category": "hearsay", "text": "I doubt my manager is Bob Tran.", "attribute": null, "value": null}
+{"id": "A016", "category": "hearsay", "text": "Unlikely that my manager is Bob Tran.", "attribute": null, "value": null}
+{"id": "A017", "category": "quoted", "text": "The forwarded email from Eve says \"my name is Eve Mallory\".", "attribute": null, "value": null}
+{"id": "A018", "category": "quoted", "text": "Eve: my employee id is E-00001", "attribute": null, "value": null}
+{"id": "A019", "category": "wrong_slot", "text": "I'm on Windows, and my editor keeps crashing.", "attribute": null, "value": null}
+{"id": "A020", "category": "wrong_slot", "text": "I'm on PTO this week; Sam is handling the IDE rollout.", "attribute": null, "value": null}
+{"id": "A021", "category": "wrong_slot", "text": "I'm on Mac and my IDE is fine.", "attribute": null, "value": null}
+{"id": "A022", "category": "wrong_slot", "text": "My goal is to be home by six; the sprint review ran late.", "attribute": null, "value": null}
+{"id": "A023", "category": "wrong_slot", "text": "My goal is to quit. The sprint is going badly.", "attribute": null, "value": null}
+{"id": "A024", "category": "wrong_slot", "text": "My editor is Sam Okafor.", "attribute": null, "value": null}
+{"id": "A025", "category": "wrong_slot", "text": "My role is Key to the launch.", "attribute": null, "value": null}
+{"id": "A026", "category": "wrong_slot", "text": "I live in Google Docs these days.", "attribute": null, "value": null}
+{"id": "A027", "category": "wrong_slot", "text": "I'm on Project Atlas's Slack channel.", "attribute": null, "value": null}
+{"id": "A028", "category": "wrong_slot", "text": "I report to Bob Tran's team.", "attribute": null, "value": null}
+{"id": "A029", "category": "wrong_slot", "text": "My manager is Bob Tran's boss.", "attribute": null, "value": null}
+{"id": "A030", "category": "wrong_slot", "text": "My manager is Bob Tran and Alice Reyes.", "attribute": null, "value": null}
+{"id": "A031", "category": "predicate", "text": "My office is a mess.", "attribute": null, "value": null}
+{"id": "A032", "category": "predicate", "text": "My office is closed today.", "attribute": null, "value": null}
+{"id": "A033", "category": "predicate", "text": "My KPI is up 10% this week.", "attribute": null, "value": null}
+{"id": "A034", "category": "predicate", "text": "I was promoted to Senior Analyst but it got reversed.", "attribute": null, "value": null}
+{"id": "A035", "category": "invalid", "text": "My employee id is E-１２３４.", "attribute": null, "value": null}
+{"id": "A036", "category": "invalid", "text": "I was hired on 9999-99-99.", "attribute": null, "value": null}
+{"id": "A037", "category": "boundary", "text": "My manager is Bob McAllister.", "attribute": "current_manager", "value": "Bob McAllister"}
+{"id": "A038", "category": "boundary", "text": "My manager is Bob DeWitt.", "attribute": "current_manager", "value": "Bob DeWitt"}
+{"id": "A039", "category": "boundary", "text": "My manager is now Bob O'Brien.", "attribute": "current_manager", "value": "Bob O'Brien"}
+{"id": "A040", "category": "boundary", "text": "My name is Mary Ann Smith Jones.", "attribute": "name", "value": "Mary Ann Smith Jones"}
+{"id": "A041", "category": "boundary", "text": "My title is Head of Data.", "attribute": "job_title", "value": "Head of Data"}
+{"id": "A042", "category": "boundary", "text": "My title is Senior Staff Software Engineer.", "attribute": "job_title", "value": "Senior Staff Software Engineer"}
+{"id": "A043", "category": "boundary", "text": "My title is Analyst II.", "attribute": "job_title", "value": "Analyst II"}
+{"id": "A044", "category": "boundary", "text": "I live in Salt Lake City.", "attribute": "home_city", "value": "Salt Lake City"}
+{"id": "A045", "category": "boundary", "text": "I live in St. Louis.", "attribute": "home_city", "value": "St. Louis"}
+{"id": "A046", "category": "boundary", "text": "My office is 1 St. James Place.", "attribute": "office_location", "value": "1 St. James Place"}
+{"id": "A047", "category": "boundary", "text": "My main metric is p95 latency under 1.5s.", "attribute": "primary_metric", "value": "p95 latency under 1.5s"}
+{"id": "A048", "category": "boundary", "text": "My office moved to Floor 3 last week.", "attribute": "office_location", "value": "Floor 3"}
+{"id": "A049", "category": "boundary", "text": "My office is now Floor 3, Building A until we move.", "attribute": "office_location", "value": "Floor 3, Building A"}
+{"id": "A050", "category": "boundary", "text": "My metric is NPS but the CEO prefers ARR", "attribute": "primary_metric", "value": "NPS"}
+{"id": "A051", "category": "name_like_marker", "text": "My manager is Will Turner.", "attribute": "current_manager", "value": "Will Turner"}
+{"id": "A052", "category": "name_like_marker", "text": "My manager is Hope Davis.", "attribute": "current_manager", "value": "Hope Davis"}
+{"id": "A053", "category": "repeated", "text": "My manager is Alice Reyes. Update: my manager is Bob Tran.", "attribute": "current_manager", "value": "Bob Tran"}
