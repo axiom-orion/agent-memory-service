@@ -16,6 +16,7 @@ been a no-op that looked wired.
 """
 from __future__ import annotations
 
+from .extractor import Extractor
 from .pg_store import PgStore
 from .service import MemoryService
 from .types import MemoryItem, MemoryType
@@ -84,12 +85,18 @@ class PersistentMemoryService(MemoryService):
         self.store.upsert([item])   # one row, not a full flush — writes stay O(1)
         return item
 
-    def ingest_records(self, records: list[dict]) -> None:
-        before = {it.id for it in self._all_items()}
-        super().ingest_records(records)
-        new = [it for it in self._all_items() if it.id not in before]
-        if new:
-            self.store.upsert(new)
+    def ingest_records(self, records: list[dict],
+                       extractor: Extractor | None = None) -> list[str]:
+        items, unavailable = self._ingest(records, extractor)
+        if items:
+            self.store.upsert(items)   # exactly the items this call created
+        return unavailable
+
+    def reextract(self, item_ids: list[str], extractor: Extractor) -> list[str]:
+        updated, still = self._reextract(item_ids, extractor)
+        if updated:
+            self.store.upsert(updated)  # the durable row gets the fact, not just RAM
+        return still
 
     def consolidate(self, now_day: int) -> None:
         super().consolidate(now_day)

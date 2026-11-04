@@ -20,6 +20,7 @@ Everything runs on CPU, no external services. The numbers below are produced by 
 | +recency | 0.667 | 0.917 | 0.583 | 35.0 |
 | +consolidation | 0.833 | 1.000 | 0.583 | 21.6 |
 | **+supersession (full)** | **1.000** | **1.000** | **0.000** | **21.2** |
+| +supersession, facts extracted from text | 1.000 | 1.000 | 0.000 | 21.2 |
 
 The point is sharpest on **changing facts** — the ones whose value was updated over the timeline:
 
@@ -29,6 +30,7 @@ The point is sharpest on **changing facts** — the ones whose value was updated
 | +recency | 0.429 | 1.000 |
 | +consolidation | 0.714 | 1.000 |
 | **+supersession (full)** | **1.000** | **0.000** |
+| +supersession, facts extracted from text | 1.000 | 0.000 |
 
 Stable facts (name, home city, employee ID) score **1.000 acc@1 under every policy** — the service adds no regression on what flat retrieval already handles.
 
@@ -38,7 +40,76 @@ Stable facts (name, home city, employee ID) score **1.000 acc@1 under every poli
 - **Recency helps, but it is a blunt instrument.** Weighting newer memories higher lifts changing-fact accuracy to 0.429 — but it cannot be turned up far without burying *old-but-stable* facts under recent noise, so it never removes stale values (stale@5 stays 1.000). Recency is a tiebreaker, not a correctness mechanism.
 - **Consolidation gets the current value to rank 1** (0.714) by collapsing repeated statements into terse semantic facts and letting recency break ties — and it cuts context tokens **32.5 → 21.6** because the agent grounds on one-line facts instead of verbose logs. But without supersession the deduped *old* values still coexist, so stale@5 remains 1.000: the stale fact is still retrievable, just lower.
 - **Supersession is the correctness mechanism.** Keying semantic facts on `(subject, attribute)` and marking superseded values inactive means the only candidate for a changed fact is its current value: acc@1 **1.000**, stale@5 **0.000**. The superseded values are not deleted — they are retained, marked, and queryable through the audit log, which is what an auditable/regulated deployment requires.
+- **The last row runs without the structured triples.** Every other row ingests the `(subject, attribute, value)` fields the generator emitted; this one ignores them and extracts each fact from the statement text (`RuleExtractor`), so it measures the whole path free text takes. It matches the full row because extraction recovers all 32 triples exactly (asserted in `tests/test_extractor.py`). That shows the wiring is correct, not that extraction generalizes; for that, see below.
 - **Honest note on tuning:** the recency weight (0.25) was chosen so a strong similarity match isn't overturned by recent noise; it was not tuned to the gold answers, and the supersession result is recency-independent (once stale values are inactive, the current value is the only candidate for that key regardless of weighting).
+
+### Extraction — the step the table above depends on
+
+Supersession only works if every statement of a fact lands on the **same key**: "my manager is Alice" and "my boss is now Bob" must both become `current_manager`, or the stale value survives as a separate fact and comes back. So extraction is **schema-locked**: an extractor may only emit an attribute from `FACT_SCHEMA`. A statement it can't place there stays an episodic memory instead of being guessed into the wrong slot.
+
+A **wrong value is worse than a missing one**: it lands on a supersession key and retires the correct value. So the rule extractor is an **allowlist**. Every clause of a statement must be a complete fact statement it knows, from the first word to the last, or it abstains.
+
+That design came out of two rounds of hostile review. The earlier versions found a fact pattern anywhere in a message and blocked a list of hedge words, and a blocklist can always be reworded around ("says" becomes "saying", "if" becomes "Starting Monday,"). Now "Starting Monday, I report to Bob Tran" abstains because "Starting Monday," belongs to no fact statement, not because "starting" is listed anywhere.
+
+Each slot's value fills a grammar:
+- a name is two to four capitalised names
+- a time zone is a named zone
+- a metric is a noun phrase ending in a measured quantity
+- after "I'm on", only a known editor counts as an IDE
+
+A few checks then reject a value that fits the grammar but isn't one: a team ("Platform Engineering") as a manager, a workplace tool ("Slack") as a city, a placeholder ("TBD"), or a hire date before 1950 or in the future.
+
+| extractor · statements | precision ↑ | recall ↑ | wrong values ↓ | false facts ↓ |
+|---|---|---|---|---|
+| rule · corpus (42 generated statements) | 1.000 | 1.000 | 0 | 0 / 10 |
+| rule · dev (42, written alongside the rules) | 1.000 | 0.864 | 0 | 0 / 20 |
+| rule · adversarial r1 (53 review probes) | 1.000 | 0.588 | 0 | 0 / 36 |
+| rule · adversarial r2 (59 review probes) | 1.000 | 0.333 | 0 | 0 / 56 |
+
+**Precision** is the share of extracted facts with the right subject, attribute and value; **recall** the share of stated facts extracted right. A **wrong value** is a stated fact extracted with the wrong subject, attribute or value. A **false fact** is one extracted from a statement that asserts none; the denominator is how many such statements there are. Values compare case-insensitively. Precision is undefined, not 1.000, when nothing is extracted (definitions: [`extraction_eval.py`](src/agent_memory/extraction_eval.py)).
+
+**None of these sets is held out, so none of them estimates accuracy on real traffic.**
+
+- **Corpus = wiring.** `RuleExtractor` covers the generator's phrasings, so recovering all 32 labelled triples checks that ingestion really runs extraction.
+- **Dev = regression.** [`eval/extraction_dev.jsonl`](eval/extraction_dev.jsonl) holds 22 paraphrases ("my boss is…", "I report to…") and 20 statements that must yield no fact: negation, hypotheticals, questions, other people's facts and past values. It was written alongside the rules, so treat its recall as in-sample.
+- **Adversarial = what two rounds of hostile review found.** [`eval/extraction_adversarial.jsonl`](eval/extraction_adversarial.jsonl) holds every probe a logic review and a security review used, with gold labels and the round each came from.
+  - **Round 1**, against the first version: conditions split off by a comma, questions mid-message, reported speech, quoted text and speaker labels, "I'm on PTO" read as an IDE, truncated names and titles, lookalike digits and impossible dates.
+  - **Round 2**, against the blocklist version: the same classes reworded. That means a capitalised marker ("I Think…"), "saying" instead of "says", "Starting Monday,", a full-width question mark, a zero-width space inside "said", "[10:32] Eve:", "Sam's sprint goal" and "I live in Slack".
+
+  | version | round 1: wrong / false | round 2: wrong / false |
+  |---|---|---|
+  | first: patterns + per-clause guards | 15 / 36 | 2 / 50 |
+  | second: statement-level blocklist | 0 / 1 | 1 / 55 |
+  | this one: allowlist | 0 / 0 | 0 / 0 |
+
+  Each round's probes were chosen because they broke the version before, so those versions score badly by construction, and this version's fixes were written against them. The table shows those failures are closed, not that no new ones exist. What the allowlist changes is the default: a frame it has never seen abstains, instead of needing a new blocklist entry.
+
+  What is left:
+  - **No wrong values or false facts** on any set.
+  - **Abstentions on real facts:** 7 in round 1, 2 in round 2 and 3 dev paraphrases. Examples are "I live in St. Louis", "My main metric is p95 latency under 1.5s" and "I was living elsewhere but I live in Paris". An abstention leaves the statement episodic, which is the safe failure; the Claude extractor exists for that recall.
+  - **The value checks are short lists.** A workplace tool missing from the list would still be read as a city ("I live in Basecamp"), and a title such as "Manager of Sam Okafor" fits the title grammar.
+
+**What extraction cannot know is who is speaking.** Every fact is filed under one subject, `user`, so the caller must pass only text the user wrote themselves, never forwarded mail, tool output or document text. Facts also carry the record's own `ts_day`, and the latest day wins, so on an untrusted path that day should come from the server. Both limits predate this extractor.
+
+**The Claude extractor** (`LLMExtractor`) covers the phrasings the allowlist doesn't:
+- **Output:** a JSON-schema output whose attribute must come from `FACT_SCHEMA`, with a subject of `user` or `other`.
+- **Pre-filter:** before any request, a blocklist runs on an NFKC-normalised copy of the statement. It catches questions (full-width ones included), quotations, speaker labels and timestamps, hedges and conditions. It can be reworded around, so it saves requests and noise; it is not the guarantee.
+- **Never parsed or sent:** statements over 1,000 characters, and statements carrying control, format or surrogate characters (zero-width spaces, bidi overrides). The rule extractor refuses them too.
+- **Delimited input:** the statement is sent between `<statement>` tags with its markup escaped, so it cannot close its own tags, and the model is told it is data, not instructions.
+- **The value:**
+  - It must be a whole span of the statement, and it is stored as the statement's own characters, never the model's string.
+  - For a slot with a grammar, it must be an *entire* grammar match in the statement. That rejects "Bob Tran" from "Bob Tran-Nguyen", "Head" from "Head of Data", "VS" from "VS Code" and "E-1234" from "E-1234-5678".
+  - It passes the same value checks as the rule extractor.
+- **Who a fact is about:** this is still the model's `user`/`other` answer. Validation cannot catch a model that files "Sam's manager is Bob Tran" under the user.
+- **Failures:**
+  - Refusals and malformed or truncated output yield no fact.
+  - Transient API errors (rate limit, overload, timeout) raise `ExtractionUnavailable`, carrying only the error type and status, rather than looking like an abstention.
+  - `ingest_records` stores such a record as plain text, audits it as `extract-unavailable` and returns its id. `reextract(ids, extractor)` then fills the fact in on the stored item, with no duplicate; `PersistentMemoryService` writes it through to the durable record.
+  - The batch is validated and every fact extracted before anything is stored, so a malformed record or a configuration error leaves the store untouched.
+- **Open-vocabulary mode:** `schema=None` is for offline corpora, used by the LoCoMo runner. It accepts any snake_case attribute, and the subject must be a person's name the statement contains. It is not for a service path.
+- **Quality is unmeasured here.** Behaviour is pinned by tests against a fake client; measuring quality needs credentials. `python eval/run_eval.py --llm` adds its rows, and those numbers are not in this README because they have not been run.
+
+**What I'd ship.** Use the rule extractor as the conservative, offline baseline, and the Claude extractor where recall matters. Measure both on a labelled sample of real traffic, with wrong values as the gating number.
 
 ---
 
@@ -138,7 +209,7 @@ flowchart LR
 | scoring | `scoring.py` | `w_sim·cosine + w_rec·exp(-age/τ) + w_imp·importance` |
 | retention | `retention.py` | TTL expiry, pruning of superseded facts past a grace window |
 | audit | `audit.py` | append-only operation log (the explainability substrate) |
-| extractor | `extractor.py` | structured passthrough; optional Anthropic LLM extraction (production) |
+| extractor | `extractor.py` | schema-locked `FACT_SCHEMA`; structured passthrough, deterministic `RuleExtractor`, Claude `LLMExtractor` (JSON-schema output, value must be a whole span of the text); both text extractors abstain on the whole statement rather than guess |
 | index | `vector_index.py` | FAISS `IndexIDMap2` over int64 ids; exact `IndexFlatIP` by default (HNSW opt-in); `rebuild()` from the active set, `remove()` on flat |
 | service | `service.py` | `remember` / `consolidate` / `recall` / `forget` facade; owns the str↔int id map, `get_active_vectors()`, and `rebuild_index()` |
 
@@ -207,14 +278,14 @@ consumer — the service-side half of Stage 0.
 
 ## Production backends
 
-The reference build is in-memory (FAISS + Python) so the eval is reproducible with zero setup. The interfaces map onto production stores without changing call sites: working memory → Redis with TTL; episodic/semantic vector stores → pgvector / Pinecone / Vertex AI Vector Search; the audit log → an append-only table or event stream. The `extractor.LLMExtractor` sketches the Anthropic-backed path that populates `(subject, attribute, value)` from free-text turns; the eval uses the structured passthrough so CI needs no key or network.
+The reference build is in-memory (FAISS + Python) so the eval is reproducible with zero setup. The interfaces map onto production stores without changing call sites: working memory → Redis with TTL; episodic/semantic vector stores → pgvector / Pinecone / Vertex AI Vector Search; the audit log → an append-only table or event stream. `extractor.LLMExtractor` is the Anthropic-backed path that populates `(subject, attribute, value)` from free-text turns; the eval's extraction rows use the offline `RuleExtractor`, so CI needs no key or network.
 
 ---
 
 ## Scope and honest notes
 
 - **Synthetic data, deterministic** (`SEED=23`): no real-person PII, and every gold answer is derivable from the generated timeline. The scenario is small (42 interactions, 12 queries) — enough to separate the policies cleanly and run fast/deterministically, not a claim about behaviour at production scale. The FAISS index and batched embedding cache are there so the same code scales.
-- **Fact extraction is upstream.** The eval assumes structured `(subject, attribute, value)` triples (as if emitted by an agent or the optional LLM extractor). Free-text fact extraction quality is its own problem and is out of scope for this measurement.
+- **Extraction is measured, but not on held-out data.** The headline table holds with facts extracted from text. The rule extractor gives zero wrong values and zero false facts on the corpus, the dev set and both rounds of reviewer probes. But the rules were written against all of those sets, so none of them estimates accuracy on real traffic. The Claude extractor's quality is unmeasured here (it needs credentials: `--llm`).
 - **Provenance comes in two grades here.** Item-level provenance (which statements back a fact) is source attribution, not proof. The **PAG** slice adds the cryptographic part — a hash chain with optional HMAC signing over the operation log — but only for the append-only slice; the consolidation/TTL layer that mutates and forgets is memory, not provenance-of-record. Signing requires a configured key; per-request agent identity on the HTTP surface is future work (today the writer identity is service-level).
 - **Consolidation here is rule-based** (group-by-key, latest-wins). Semantic summarisation/clustering of non-fact episodic memories and an LLM answer-synthesis layer over the recalled, cited context are the natural next extensions.
 
@@ -237,8 +308,8 @@ agent-memory-service/
 │   ├── types.py  config.py  embeddings.py  scoring.py  vector_index.py
 │   ├── stores.py                 # working / episodic / semantic / procedural
 │   ├── consolidation.py  retention.py  audit.py  extractor.py  service.py
-├── eval/      # run_eval.py, queries.jsonl, results.md, results.json
-├── tests/     # pytest: stores, consolidation, audit, retrieval properties
+├── eval/      # run_eval.py, queries.jsonl, extraction_{dev,adversarial}.jsonl, results.md, results.json
+├── tests/     # pytest: stores, consolidation, audit, retrieval, extraction (rules, Claude via a fake client, scoring)
 ├── scripts/   # demo.py
 ├── Makefile   pyproject.toml   requirements.txt   .github/workflows/ci.yml
 ```

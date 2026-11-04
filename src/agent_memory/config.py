@@ -37,6 +37,8 @@ class MemoryPolicy:
 class Settings:
     interactions_path: Path = ROOT / "data" / "sessions" / "interactions.jsonl"
     queries_path: Path = ROOT / "eval" / "queries.jsonl"
+    extraction_dev_path: Path = ROOT / "eval" / "extraction_dev.jsonl"
+    extraction_adversarial_path: Path = ROOT / "eval" / "extraction_adversarial.jsonl"
     cache_dir: Path = ROOT / ".cache"
     embed_model: str = os.environ.get("EMBED_MODEL",
                                       "sentence-transformers/all-MiniLM-L6-v2")

@@ -14,10 +14,29 @@ Scored on the gold query set ("what is my current <X>?"):
   stale@5    a superseded/old value appears in top-5                 (LOWER  better)
   ctx_tokens mean tokens across the top-5 retrieved memories (cost)  (lower  better)
 
-  python eval/run_eval.py        # full ablation (deterministic given the seed)
+Then extraction, the step the ablation above takes as given. The ablation feeds
+the service the structured triples the generator emitted; the "from text" row instead
+extracts every fact from the statement text (RuleExtractor) and runs the same policy.
+Extraction itself is scored on three sets, none of them an independent held-out set:
+
+  corpus          the generator's own statements (checks wiring)
+  dev             paraphrases and must-abstain statements, written alongside the rules
+  adversarial r1  the probes hostile reviewers used to break the first version
+  adversarial r2  the probes they used to break the second (blocklist) version
+
+Definitions live in agent_memory/extraction_eval.py:
+
+  precision    of the facts extracted, the share with the right subject, slot and value (↑)
+  recall       of the facts stated, the share extracted right                        (↑)
+  false facts  statements that assert no current fact but yielded one               (↓)
+
+  python eval/run_eval.py                    # full eval (deterministic given the seed)
+  python eval/run_eval.py --llm              # + the Claude extractor (needs credentials)
+  python eval/run_eval.py --embedder hashing # offline, no model download; prints only
 """
 from __future__ import annotations
 
+import argparse
 import json
 import sys
 from collections import defaultdict
@@ -26,9 +45,17 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from agent_memory.config import MemoryPolicy  # noqa: E402
+from agent_memory.extraction_eval import (  # noqa: E402
+    adversarial_cases,
+    corpus_cases,
+    load_cases,
+    score_extraction,
+)
+from agent_memory.extractor import Extractor, LLMExtractor, RuleExtractor  # noqa: E402
 from agent_memory.service import MemoryService, load_interactions, load_queries  # noqa: E402
 
 K = 5
+EVAL_DIR = Path(__file__).resolve().parent
 
 POLICIES = [
     ("flat-vector", MemoryPolicy(use_recency=False, use_consolidation=False,
@@ -42,10 +69,11 @@ POLICIES = [
 ]
 
 
-def evaluate(records: list[dict], queries: list[dict], policy: MemoryPolicy) -> dict:
+def evaluate(records: list[dict], queries: list[dict], policy: MemoryPolicy,
+             extractor: Extractor | None = None, embedder=None) -> dict:
     now = max(r["ts_day"] for r in records) + 1
-    svc = MemoryService(policy=policy)
-    svc.ingest_records(records)
+    svc = MemoryService(policy=policy, embedder=embedder)
+    svc.ingest_records(records, extractor)
     svc.consolidate(now)
     svc.forget(now)
 
@@ -92,15 +120,35 @@ def changing_table(results):
     return "\n".join(rows)
 
 
-def main():
-    records = load_interactions()
-    queries = load_queries()
-    results = [(name, evaluate(records, queries, pol)) for name, pol in POLICIES]
-    for name, res in results:
-        o = res["overall"]
-        print(f"  [{name}] acc@1={o['acc@1']:.3f} stale@5={o['stale@5']:.3f} "
-              f"ctx={o['ctx_tokens']:.1f}", file=sys.stderr)
+# --------------------------------------------------------------------------- #
+# Extraction tables
+# --------------------------------------------------------------------------- #
+def _rate(x: float | None) -> str:
+    return "—" if x is None else f"{x:.3f}"  # None: nothing to divide by (see extraction_eval)
 
+
+def extraction_table(rows: list[tuple[str, dict]]) -> str:
+    out = ["| extractor · statements | precision ↑ | recall ↑ | wrong values ↓ "
+           "| false facts ↓ |", "|---|---|---|---|---|"]
+    for name, sc in rows:
+        out.append(f"| {name} | {_rate(sc['precision'])} | {_rate(sc['recall'])} | "
+                   f"{sc['wrong']} | {sc['false']} / {sc['negatives']} |")
+    return "\n".join(out)
+
+
+def category_table(name: str, sc: dict) -> str:
+    out = [f"| {name} · category | correct | wrong | missed | false facts | quiet |",
+           "|---|---|---|---|---|---|"]
+    for cat, c in sc["by_category"].items():
+        out.append(f"| {cat} | {c['correct']} | {c['wrong']} | {c['missed']} | {c['false']} "
+                   f"| {c['quiet']} |")
+    return "\n".join(out)
+
+
+def write_results(results: list[tuple[str, dict]], rows: list[tuple[str, dict]],
+                  extraction: dict[str, dict], records: list[dict], queries: list[dict],
+                  sets: dict[str, list[dict]]) -> Path:
+    """Write eval/results.md and eval/results.json; returns the .md path."""
     n_change = sum(q["category"] == "changing" for q in queries)
     md = [
         "# Memory-policy evaluation\n",
@@ -109,13 +157,76 @@ def main():
         "↑ higher is better, ↓ lower is better.\n",
         "## Overall\n", overall_table(results), "",
         "## Changing facts only (the supersession cases)\n", changing_table(results), "",
+        "## Extraction\n",
+        "None of these sets is independent of the rules, so none estimates accuracy on "
+        f"real traffic. Corpus = the {len(records)} generated statements (checks wiring). "
+        f"Dev = {len(sets['dev'])} paraphrases and must-abstain statements written alongside "
+        f"the rules. Adversarial r1 / r2 = the {len(sets['adversarial r1'])} and "
+        f"{len(sets['adversarial r2'])} probes hostile reviewers used to break the first and "
+        "second versions, with gold labels; the fixes were written against them, so they "
+        "show those failures are closed, not that new ones are absent. A wrong value is the "
+        "failure that matters: it retires a correct one.\n",
+        extraction_table(rows), "",
+        *[category_table(name, sc) + "\n" for name, sc in rows],
         "_Generated by `eval/run_eval.py`; deterministic given the seeded sessions._",
     ]
-    out = Path(__file__).resolve().parent / "results.md"
+    out = EVAL_DIR / "results.md"
     out.write_text("\n".join(md) + "\n", encoding="utf-8")
     out.with_suffix(".json").write_text(json.dumps(
-        {n: r for n, r in results}, indent=2), encoding="utf-8")
-    print("\n" + overall_table(results) + "\n\n" + changing_table(results))
+        {**{n: r for n, r in results}, "extraction": extraction}, indent=2), encoding="utf-8")
+    return out
+
+
+def main():
+    ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
+    ap.add_argument("--embedder", choices=["minilm", "hashing"], default="minilm",
+                    help="hashing: no model download; results are printed, not written")
+    ap.add_argument("--llm", action="store_true",
+                    help="also score the Claude extractor (needs Anthropic credentials)")
+    args = ap.parse_args()
+    embedder = None
+    if args.embedder == "hashing":
+        from agent_memory.embeddings import HashingEmbedder
+        embedder = HashingEmbedder()
+
+    records = load_interactions()
+    queries = load_queries()
+    results = [(name, evaluate(records, queries, pol, embedder=embedder))
+               for name, pol in POLICIES]
+    # The same full policy, but every fact extracted from the statement text.
+    full_policy = POLICIES[-1][1]
+    results.append(("+supersession, facts extracted from text",
+                    evaluate(records, queries, full_policy, RuleExtractor(), embedder)))
+    for name, res in results:
+        o = res["overall"]
+        print(f"  [{name}] acc@1={o['acc@1']:.3f} stale@5={o['stale@5']:.3f} "
+              f"ctx={o['ctx_tokens']:.1f}", file=sys.stderr)
+
+    adversarial = adversarial_cases()
+    sets = {"corpus": corpus_cases(records), "dev": load_cases(),
+            **{f"adversarial r{n}": [c for c in adversarial if c["round"] == n]
+               for n in sorted({c["round"] for c in adversarial})}}
+    extractors: list[tuple[str, Extractor]] = [("rule", RuleExtractor())]
+    if args.llm:
+        extractors.append(("llm", LLMExtractor()))
+    extraction: dict[str, dict] = {}
+    rows: list[tuple[str, dict]] = []
+    for ex_name, ex in extractors:
+        for set_name, set_cases in sets.items():
+            sc = score_extraction(ex, set_cases)
+            extraction[f"{ex_name} · {set_name}"] = sc
+            rows.append((f"{ex_name} · {set_name}", sc))
+            print(f"  [extract {ex_name} · {set_name}] precision={_rate(sc['precision'])} "
+                  f"recall={_rate(sc['recall'])} wrong={sc['wrong']} false={sc['false']} "
+                  f"unavailable={sc['unavailable']}", file=sys.stderr)
+
+    print("\n" + overall_table(results) + "\n\n" + changing_table(results)
+          + "\n\n" + extraction_table(rows))
+    if embedder is not None:
+        print("\n(--embedder hashing: results printed only; results.md is MiniLM's)",
+              file=sys.stderr)
+        return
+    out = write_results(results, rows, extraction, records, queries, sets)
     print(f"\nwrote {out} and results.json", file=sys.stderr)
 
 
